@@ -13,8 +13,8 @@ _This is designed very specifically around the needs of Mapzen for processing up
 First of all this requires Postgresql 9.6 in order that we can take advantage of the recent `UPSERT` syntax.
 
 ```
-wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
-apt-get update
+sudo wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
+sudo apt-get update
 sudo apt-get install postgresql-9.6 postgresql-contrib-9.6 postgis postgresql-9.6-postgis-2.3
 ```
 
