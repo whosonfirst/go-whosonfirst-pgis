@@ -4,7 +4,7 @@
 
 This is not ready to use. It is still being tested. It will probably be renamed.
 
-This is a compliment-cum-alternative to the `go-whosonfirst-tile38` package which is having trouble managing the volume of data (see PGSQL table schema below) we are trying to throw at it. The same basic logic around _what_ is indexed is shared between both the Tile38 and PGIS packages.
+This is a compliment-cum-alternative to the `go-whosonfirst-tile38` package which is having trouble managing the volume of data (see PGSQL table schema below) we are trying to throw at it. The same basic logic around _what_ is indexed is shared between both the Tile38 and PGIS packages. In that way both packages may be folded in to a generic `go-whosonfirst-spatial` interface but it is too soon for that.
 
 _This is designed very specifically around the needs of Mapzen for processing updates to Who's On First data rather than a general purpose tool for anyone else._
 
