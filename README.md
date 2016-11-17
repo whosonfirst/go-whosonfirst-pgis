@@ -27,6 +27,8 @@ sudo -u postgres psql -c "CREATE TABLE whosonfirst (id BIGINT PRIMARY KEY,parent
 sudo -u postgres psql -c "CREATE INDEX by_geom ON whosonfirst USING GIST(geom);" whosonfirst
 ```
 
+_Note that this still lacks indices on things like `placetype_id` and others._
+
 ## See also
 
 * http://www.saintsjd.com/2014/08/13/howto-install-postgis-on-ubuntu-trusty.html
