@@ -30,7 +30,11 @@ type Meta struct {
 
 type Coords []float64
 
-type Polygon []Coords
+type LinearRing []Coords
+
+type Polygon []LinearRing
+
+type MultiPolygon []Polygon
 
 type Geometry struct {
 	Type        string `json:"type"`
@@ -38,8 +42,13 @@ type Geometry struct {
 }
 
 type GeometryPoly struct {
-	Type        string    `json:"type"`
-	Coordinates []Polygon `json:"coordinates"`
+	Type        string  `json:"type"`
+	Coordinates Polygon `json:"coordinates"`
+}
+
+type GeometryMultiPoly struct {
+	Type        string       `json:"type"`
+	Coordinates MultiPolygon `json:"coordinates"`
 }
 
 type PgisClient struct {
@@ -48,7 +57,7 @@ type PgisClient struct {
 	Debug      bool
 	Verbose    bool
 	dsn        string
-	conns	   chan bool
+	conns      chan bool
 }
 
 func NewPgisClient(host string, port int, user string, password string, dbname string, maxconns int) (*PgisClient, error) {
@@ -78,7 +87,7 @@ func NewPgisClient(host string, port int, user string, password string, dbname s
 	conns := make(chan bool, maxconns)
 
 	for i := 0; i < maxconns; i++ {
-	    conns <- true
+		conns <- true
 	}
 
 	client := PgisClient{
@@ -86,7 +95,7 @@ func NewPgisClient(host string, port int, user string, password string, dbname s
 		Geometry:   "", // use the default geojson geometry
 		Debug:      false,
 		dsn:        dsn,
-		conns:	    conns,
+		conns:      conns,
 	}
 
 	return &client, nil
@@ -94,7 +103,7 @@ func NewPgisClient(host string, port int, user string, password string, dbname s
 
 func (client *PgisClient) dbconn() (*sql.DB, error) {
 
-        <- client.conns
+	<-client.conns
 
 	db, err := sql.Open("postgres", client.dsn)
 
@@ -138,55 +147,57 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 
 		var geom_type string
 		geom_type, _ = body.Path("geometry.type").Data().(string)
-	
+
 		if geom_type == "MultiPolygon" {
-				geom := body.Path("geometry")
-				str_geom = geom.String()
+
+			geom := body.Path("geometry")
+			str_geom = geom.String()
+
 		} else if geom_type == "Polygon" {
 
-		  pl := make([][]Polygon, 0)
-		  p := make([]Polygon, 0)
+			polys := make([]Polygon, 0)
 
-		  polys := feature.GeomToPolygons()
+			for _, p := range feature.GeomToPolygons() {
 
-		  for _, ply := range polys {
+				poly := make([]LinearRing, 0)
+				ring := make([]Coords, 0)
 
-	  	  coords := make([]Coords, 0)
+				for _, po := range p.OuterRing.Points() {
 
-		  for _, pt := range ply.OuterRing.Points() {
+					coord := Coords{po.Lng(), po.Lat()}
+					ring = append(ring, coord)
+				}
 
-			coords = append(coords, Coords{ pt.Lng(), pt.Lat() })
-		  }
+				poly = append(poly, ring)
 
-		  p := Polygon{ coords, }
-		  pl = append(pl, p)
+				for _, pi := range p.InteriorRings {
 
-		  for _, poly := range ply.InteriorRings {
+					ring := make([]Coords, 0)
 
-		   	_c := make([]Coords, 0)
+					for _, pt := range pi.Points() {
 
-		  	for _, pt := range poly.Points() {
-				_c = append(_c, Coords{ pt.Lng(), pt.Lat() })
+						coord := Coords{pt.Lng(), pt.Lat()}
+						ring = append(ring, coord)
+					}
+
+					poly = append(poly, ring)
+				}
+
+				polys = append(polys, poly)
 			}
 
-			_p := Polygon{ _c, }
-			pl = append(pl, _p)
-		  }
+			multi := GeometryMultiPoly{
+				Type:        "MultiPolygon",
+				Coordinates: polys,
+			}
 
-		  }
-
-		  multi := GeometryPoly{
-		  	Type: "MultiPolygon",
-			Coordinates: pl,
-		  }
-
-		  geom, _ := json.Marshal(multi)
-		  str_geom = string(geom)
+			geom, _ := json.Marshal(multi)
+			str_geom = string(geom)
 
 		} else {
 
-		  return errors.New("DO SOMETHING HERE")
-		} 
+			return errors.New("DO SOMETHING HERE")
+		}
 
 	} else if client.Geometry == "bbox" {
 
@@ -213,7 +224,7 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 		nelon = children[2].Data().(float64)
 		nelat = children[3].Data().(float64)
 
-		poly := Polygon{
+		ring := LinearRing{
 			Coords{swlon, swlat},
 			Coords{swlon, nelat},
 			Coords{nelon, nelat},
@@ -221,13 +232,11 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 			Coords{swlon, swlat},
 		}
 
-		polys := []Polygon{
-			poly,
-		}
+		poly := Polygon{ring}
 
 		geom := GeometryPoly{
 			Type:        "Polygon",
-			Coordinates: polys,
+			Coordinates: poly,
 		}
 
 		bytes, err := json.Marshal(geom)
@@ -383,8 +392,8 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 		}
 
 		defer func() {
-		      db.Close()
-		      client.conns <- true
+			db.Close()
+			client.conns <- true
 		}()
 
 		// https://www.postgresql.org/docs/9.6/static/sql-insert.html#SQL-ON-CONFLICT
@@ -397,6 +406,12 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 		if err != nil {
 			return err
 		}
+
+		/*
+			rows, _ := rsp.RowsAffected()
+			log.Println("ERR", err)
+			log.Println("ROWS", rows)
+		*/
 	}
 
 	return nil
@@ -488,7 +503,7 @@ func (client *PgisClient) IndexDirectory(abs_path string, collection string, nfs
 		err := client.IndexFile(abs_path, collection)
 
 		if err != nil {
-		   errs += 1
+			errs += 1
 			msg := fmt.Sprintf("failed to index %s, because %v", abs_path, err)
 			return errors.New(msg)
 		}
