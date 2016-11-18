@@ -136,8 +136,57 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 
 	if client.Geometry == "" {
 
-		geom := body.Path("geometry")
-		str_geom = geom.String()
+		var geom_type string
+		geom_type, _ = body.Path("geometry.type").Data().(string)
+	
+		if geom_type == "MultiPolygon" {
+				geom := body.Path("geometry")
+				str_geom = geom.String()
+		} else if geom_type == "Polygon" {
+
+		  pl := make([][]Polygon, 0)
+		  p := make([]Polygon, 0)
+
+		  polys := feature.GeomToPolygons()
+
+		  for _, ply := range polys {
+
+	  	  coords := make([]Coords, 0)
+
+		  for _, pt := range ply.OuterRing.Points() {
+
+			coords = append(coords, Coords{ pt.Lng(), pt.Lat() })
+		  }
+
+		  p := Polygon{ coords, }
+		  pl = append(pl, p)
+
+		  for _, poly := range ply.InteriorRings {
+
+		   	_c := make([]Coords, 0)
+
+		  	for _, pt := range poly.Points() {
+				_c = append(_c, Coords{ pt.Lng(), pt.Lat() })
+			}
+
+			_p := Polygon{ _c, }
+			pl = append(pl, _p)
+		  }
+
+		  }
+
+		  multi := GeometryPoly{
+		  	Type: "MultiPolygon",
+			Coordinates: pl,
+		  }
+
+		  geom, _ := json.Marshal(multi)
+		  str_geom = string(geom)
+
+		} else {
+
+		  return errors.New("DO SOMETHING HERE")
+		} 
 
 	} else if client.Geometry == "bbox" {
 
@@ -418,6 +467,10 @@ func (client *PgisClient) IndexDirectory(abs_path string, collection string, nfs
 
 	re_wof, _ := regexp.Compile(`(\d+)\.geojson$`)
 
+	count := 0
+	ok := 0
+	errs := 0
+
 	cb := func(abs_path string, info os.FileInfo) error {
 
 		// please make me more like this...
@@ -430,20 +483,27 @@ func (client *PgisClient) IndexDirectory(abs_path string, collection string, nfs
 			return nil
 		}
 
+		count += 1
+
 		err := client.IndexFile(abs_path, collection)
 
 		if err != nil {
+		   errs += 1
 			msg := fmt.Sprintf("failed to index %s, because %v", abs_path, err)
 			return errors.New(msg)
 		}
 
+		ok += 1
 		return nil
 	}
 
 	c := crawl.NewCrawler(abs_path)
 	c.NFSKludge = nfs_kludge
 
-	return c.Crawl(cb)
+	c.Crawl(cb)
+
+	log.Printf("count %d ok %d error %d\n", count, ok, errs)
+	return nil
 }
 
 func (client *PgisClient) IndexFileList(abs_path string, collection string) error {
