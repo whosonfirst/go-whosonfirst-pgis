@@ -11,6 +11,7 @@ import (
 	"github.com/whosonfirst/go-whosonfirst-csv"
 	"github.com/whosonfirst/go-whosonfirst-geojson"
 	"github.com/whosonfirst/go-whosonfirst-placetypes"
+	_ "github.com/whosonfirst/go-whosonfirst-utils"
 	"io"
 	"log"
 	"os"
@@ -141,7 +142,8 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 
 	body := feature.Body()
 
-	var str_geom string
+	str_geom := ""
+	str_centroid := ""
 
 	if client.Geometry == "" {
 
@@ -194,8 +196,13 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 			geom, _ := json.Marshal(multi)
 			str_geom = string(geom)
 
-		} else {
+		} else if geom_type == "Point" {
 
+			geom := body.Path("geometry")
+			str_centroid = geom.String()
+
+		} else {
+			log.Println("GEOM TYPE IS", geom_type)
 			return errors.New("DO SOMETHING HERE")
 		}
 
@@ -248,6 +255,12 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 		str_geom = string(bytes)
 
 	} else if client.Geometry == "centroid" {
+		// handled below
+	} else {
+		return errors.New("unknown geometry filter")
+	}
+
+	if str_centroid == "" {
 
 		// sudo put me in go-whosonfirst-geojson?
 		// (20160829/thisisaaronland)
@@ -283,11 +296,7 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 			return err
 		}
 
-		str_geom = string(bytes)
-
-	} else {
-
-		return errors.New("unknown geometry filter")
+		str_centroid = string(bytes)
 	}
 
 	placetype := feature.Placetype()
@@ -301,11 +310,21 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 	repo, ok := feature.StringProperty("wof:repo")
 
 	if !ok {
-		msg := fmt.Sprintf("can't find wof:repo for %s", str_wofid)
-		return errors.New(msg)
+
+		// hack while I get things working (20161118/thisisaaronland)
+		repo = "whosonfirst-data"
+
+		// msg := fmt.Sprintf("can't find wof:repo for %s", str_wofid)
+		// return errors.New(msg)
 	}
 
 	if repo == "" {
+		// hack while I get things working (20161118/thisisaaronland)
+		repo = "whosonfirst-data"
+	}
+
+	if repo == "" {
+
 		msg := fmt.Sprintf("missing wof:repo for %s", str_wofid)
 		return errors.New(msg)
 	}
@@ -366,13 +385,16 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 		is_superseded SMALLINT,
 		is_deprecated SMALLINT,
 		meta JSON,
-		geom GEOGRAPHY(MULTIPOLYGON, 4326)
+		geom GEOGRAPHY(MULTIPOLYGON, 4326),
+		centroid GEOGRAPHY(POINT, 4326)
 		)
 
 	*/
 
 	// http://postgis.net/docs/ST_GeomFromGeoJSON.html
+
 	st_geojson := fmt.Sprintf("ST_GeomFromGeoJSON('%s')", str_geom)
+	st_centroid := fmt.Sprintf("ST_GeomFromGeoJSON('%s')", str_centroid)
 
 	if client.Verbose {
 
@@ -380,11 +402,12 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 			st_geojson = "ST_GeomFromGeoJSON('...')"
 		}
 
-		log.Println("INSERT INTO whosonfirst (id, parent_id, placetype_id, is_superseded, is_deprecated, meta, geom) VALUES (%s, %s, %s, %s, %s, %s, %s)", wofid, parent, pt.Id, is_superseded, is_deprecated, meta, st_geojson)
+		log.Println("INSERT INTO whosonfirst (id, parent_id, placetype_id, is_superseded, is_deprecated, meta, geom) VALUES (%s, %s, %s, %s, %s, %s, %s)", wofid, parent, pt.Id, is_superseded, is_deprecated, meta, st_geojson, st_centroid)
 
 	}
 
 	if !client.Debug {
+
 		db, err := client.dbconn()
 
 		if err != nil {
@@ -399,11 +422,31 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 		// https://www.postgresql.org/docs/9.6/static/sql-insert.html#SQL-ON-CONFLICT
 		// https://wiki.postgresql.org/wiki/What's_new_in_PostgreSQL_9.5#INSERT_..._ON_CONFLICT_DO_NOTHING.2FUPDATE_.28.22UPSERT.22.29
 
-		sql := fmt.Sprintf("INSERT INTO whosonfirst (id, parent_id, placetype_id, is_superseded, is_deprecated, meta, geom) VALUES ($1, $2, $3, $4, $5, $6, %s) ON CONFLICT(id) DO UPDATE SET parent_id=$7, placetype_id=$8, is_superseded=$9, is_deprecated=$10, meta=$11, geom=%s", st_geojson, st_geojson)
+		var sql string
+
+		if str_geom != "" && str_centroid != "" {
+
+			sql = fmt.Sprintf("INSERT INTO whosonfirst (id, parent_id, placetype_id, is_superseded, is_deprecated, meta, geom, centroid) VALUES ($1, $2, $3, $4, $5, $6, %s, %s) ON CONFLICT(id) DO UPDATE SET parent_id=$7, placetype_id=$8, is_superseded=$9, is_deprecated=$10, meta=$11, geom=%s, centroid=%s", st_geojson, st_centroid, st_geojson, st_centroid)
+
+		} else if str_geom != "" {
+
+			sql = fmt.Sprintf("INSERT INTO whosonfirst (id, parent_id, placetype_id, is_superseded, is_deprecated, meta, geom) VALUES ($1, $2, $3, $4, $5, $6, %s) ON CONFLICT(id) DO UPDATE SET parent_id=$7, placetype_id=$8, is_superseded=$9, is_deprecated=$10, meta=$11, geom=%s", st_geojson, st_geojson)
+
+		} else if str_centroid != "" {
+
+			sql = fmt.Sprintf("INSERT INTO whosonfirst (id, parent_id, placetype_id, is_superseded, is_deprecated, meta, centroid) VALUES ($1, $2, $3, $4, $5, $6, %s) ON CONFLICT(id) DO UPDATE SET parent_id=$7, placetype_id=$8, is_superseded=$9, is_deprecated=$10, meta=$11, centroid=%s", st_centroid, st_centroid)
+
+		} else {
+			// this should never happend
+		}
 
 		_, err = db.Exec(sql, wofid, parent, pt.Id, is_superseded, is_deprecated, str_meta, parent, pt.Id, is_superseded, is_deprecated, str_meta)
 
 		if err != nil {
+
+			log.Println(err)
+			log.Println(sql)
+			os.Exit(1)
 			return err
 		}
 
@@ -505,6 +548,7 @@ func (client *PgisClient) IndexDirectory(abs_path string, collection string, nfs
 		if err != nil {
 			errs += 1
 			msg := fmt.Sprintf("failed to index %s, because %v", abs_path, err)
+			log.Println(msg)
 			return errors.New(msg)
 		}
 

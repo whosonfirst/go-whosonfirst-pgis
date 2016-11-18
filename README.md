@@ -23,8 +23,9 @@ sudo -u postgres createuser -P whosonfirst
 sudo -u postgres createdb -O whosonfirst whosonfirst
 sudo -u postgres psql -c "CREATE EXTENSION postgis; CREATE EXTENSION postgis_topology;" whosonfirst
 sudo -u postgres psql -c "GRANT ALL ON TABLE whosonfirst TO whosonfirst" whosonfirst
-sudo -u postgres psql -c "CREATE TABLE whosonfirst (id BIGINT PRIMARY KEY,parent_id BIGINT,placetype_id BIGINT,is_superseded SMALLINT,is_deprecated SMALLINT,meta JSON,geom GEOGRAPHY(MULTIPOLYGON, 4326))" whosonfirst
+sudo -u postgres psql -c "CREATE TABLE whosonfirst (id BIGINT PRIMARY KEY,parent_id BIGINT,placetype_id BIGINT,is_superseded SMALLINT,is_deprecated SMALLINT,meta JSON,geom GEOGRAPHY(MULTIPOLYGON, 4326), centroid GEOGRAPHY(POINT, 4326))" whosonfirst
 sudo -u postgres psql -c "CREATE INDEX by_geom ON whosonfirst USING GIST(geom);" whosonfirst
+sudo -u postgres psql -c "CREATE INDEX by_centroid ON whosonfirst USING GIST(centroid);" whosonfirst
 ```
 
 _Note that this still lacks indices on things like `placetype_id` and others._
