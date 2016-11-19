@@ -26,6 +26,7 @@ import (
 type Meta struct {
 	Name      string           `json:"wof:name"`
 	Country   string           `json:"wof:country"`
+	Repo   string           `json:"wof:repo"`
 	Hierarchy []map[string]int `json:"wof:hierarchy"`
 }
 
@@ -310,17 +311,8 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 	repo, ok := feature.StringProperty("wof:repo")
 
 	if !ok {
-
-		// hack while I get things working (20161118/thisisaaronland)
-		repo = "whosonfirst-data"
-
-		// msg := fmt.Sprintf("can't find wof:repo for %s", str_wofid)
-		// return errors.New(msg)
-	}
-
-	if repo == "" {
-		// hack while I get things working (20161118/thisisaaronland)
-		repo = "whosonfirst-data"
+		msg := fmt.Sprintf("can't find wof:repo for %s", str_wofid)
+		return errors.New(msg)
 	}
 
 	if repo == "" {
@@ -365,6 +357,7 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 		Name:      name,
 		Country:   country,
 		Hierarchy: hier,
+		Repo: repo,
 	}
 
 	meta_json, err := json.Marshal(meta)
