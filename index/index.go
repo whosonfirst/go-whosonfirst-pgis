@@ -200,8 +200,10 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 		} else if geom_type == "Point" {
 
 			geom := body.Path("geometry")
-			str_geom = geom.String()
-			str_centroid = str_geom
+			str_centroid = geom.String()
+
+			// note we are leaving str_geom empty since it is not
+			// a multipolygon... because postgis
 
 		} else {
 			log.Println("GEOM TYPE IS", geom_type)
@@ -392,12 +394,18 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 
 	if client.Verbose {
 
+		// because we might be in verbose mode but not debug mode
+		// so the actual GeoJSON blob needs to be preserved
+
+		actual_st_geojson := st_geojson
+
 		if client.Geometry == "" {
 			st_geojson = "ST_GeomFromGeoJSON('...')"
 		}
 
-		log.Println("INSERT INTO whosonfirst (id, parent_id, placetype_id, is_superseded, is_deprecated, meta, geom) VALUES (%s, %s, %s, %s, %s, %s, %s)", wofid, parent, pt.Id, is_superseded, is_deprecated, meta, st_geojson, st_centroid)
+		log.Println("INSERT INTO whosonfirst (id, parent_id, placetype_id, is_superseded, is_deprecated, meta, geom) VALUES (%s, %s, %s, %s, %s, %s, %s)", wofid, parent, pt.Id, is_superseded, is_deprecated, str_meta, st_geojson, st_centroid)
 
+		st_geojson = actual_st_geojson
 	}
 
 	if !client.Debug {
