@@ -11,7 +11,7 @@ import (
 
 func main() {
 
-	mode := flag.String("mode", "files", "The mode to use importing data. Valid options are: directory, filelist and files.")
+	mode := flag.String("mode", "files", "The mode to use importing data. Valid options are: directory, meta, filelist and files.")
 	geom := flag.String("geometry", "", "Which geometry to index. Valid options are: centroid, bbox or whatever is in the default GeoJSON geometry (default).")
 
 	procs := flag.Int("procs", 200, "The number of concurrent processes to use importing data.")
