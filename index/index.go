@@ -26,7 +26,7 @@ import (
 type Meta struct {
 	Name      string           `json:"wof:name"`
 	Country   string           `json:"wof:country"`
-	Repo   string           `json:"wof:repo"`
+	Repo      string           `json:"wof:repo"`
 	Hierarchy []map[string]int `json:"wof:hierarchy"`
 }
 
@@ -360,7 +360,7 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 		Name:      name,
 		Country:   country,
 		Hierarchy: hier,
-		Repo: repo,
+		Repo:      repo,
 	}
 
 	meta_json, err := json.Marshal(meta)

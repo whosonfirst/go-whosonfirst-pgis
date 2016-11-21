@@ -3,15 +3,17 @@ package main
 import (
 	"flag"
 	"github.com/whosonfirst/go-whosonfirst-pgis/index"
+	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 )
 
 func main() {
 
-	mode := flag.String("mode", "files", "The mode to use importing data. Valid options are: directory, meta, filelist and files.")
+	mode := flag.String("mode", "files", "The mode to use importing data. Valid options are: directory, meta, repo, filelist and files.")
 	geom := flag.String("geometry", "", "Which geometry to index. Valid options are: centroid, bbox or whatever is in the default GeoJSON geometry (default).")
 
 	procs := flag.Int("procs", 200, "The number of concurrent processes to use importing data.")
@@ -46,6 +48,9 @@ func main() {
 	client.Debug = *debug
 	client.Geometry = *geom
 
+	// please move all this in to a generic function or package
+	// (20161121/thisisaaronland)
+
 	args := flag.Args()
 
 	for _, path := range args {
@@ -79,6 +84,37 @@ func main() {
 			data_root := parts[1]
 
 			err = client.IndexMetaFile(meta_file, *collection, data_root)
+
+		} else if *mode == "repo" {
+
+			data_root := filepath.Join(path, "data")
+			meta_root := filepath.Join(path, "meta")
+
+			_, err := os.Stat(data_root)
+
+			if os.IsNotExist(err) {
+				log.Fatal("Repo does not contain a data directory", path)
+			}
+
+			_, err = os.Stat(meta_root)
+
+			if os.IsNotExist(err) {
+				log.Fatal("Repo does not contain a meta directory", path)
+			}
+
+			files, _ := ioutil.ReadDir(meta_root)
+
+			for _, f := range files {
+
+				fname := f.Name()
+
+				if !strings.HasSuffix(fname, "-latest.csv") {
+					continue
+				}
+
+				meta_file := filepath.Join(meta_root, fname)
+				err = client.IndexMetaFile(meta_file, *collection, data_root)
+			}
 
 		} else {
 			err = client.IndexFile(path, *collection)
