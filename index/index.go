@@ -200,7 +200,8 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 		} else if geom_type == "Point" {
 
 			geom := body.Path("geometry")
-			str_centroid = geom.String()
+			str_geom = geom.String()
+			str_centroid = str_geom
 
 		} else {
 			log.Println("GEOM TYPE IS", geom_type)
