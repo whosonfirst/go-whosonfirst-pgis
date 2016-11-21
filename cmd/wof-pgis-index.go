@@ -63,7 +63,7 @@ func main() {
 			parts := strings.Split(path, ":")
 
 			if len(parts) != 2 {
-				log.Fatal("Invalid path declaration for a meta file")
+				log.Fatal("Invalid path declaration for a meta file - should be META_FILE + \":\" + DATA_ROOT")
 			}
 
 			for _, p := range parts {
