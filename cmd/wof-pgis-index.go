@@ -112,6 +112,10 @@ func main() {
 					continue
 				}
 
+				if strings.HasSuffix(fname, "-concordances-latest.csv") {
+					continue
+				}
+
 				meta_file := filepath.Join(meta_root, fname)
 				err = client.IndexMetaFile(meta_file, *collection, data_root)
 			}
