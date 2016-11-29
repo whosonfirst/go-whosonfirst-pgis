@@ -113,16 +113,6 @@ func (client *PgisClient) dbconn() (*sql.DB, error) {
 	<-client.conns
 
 	return client.db, nil
-
-	/*
-		db, err := sql.Open("postgres", client.dsn)
-
-		if err != nil {
-			return nil, err
-		}
-
-		return db, nil
-	*/
 }
 
 func (client *PgisClient) IndexFile(abs_path string, collection string) error {
@@ -426,7 +416,6 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 		}
 
 		defer func() {
-			// db.Close()
 			client.conns <- true
 		}()
 
