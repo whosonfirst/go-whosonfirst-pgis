@@ -59,6 +59,7 @@ type PgisClient struct {
 	Debug      bool
 	Verbose    bool
 	dsn        string
+	db         *sql.DB
 	conns      chan bool
 }
 
@@ -78,7 +79,10 @@ func NewPgisClient(host string, port int, user string, password string, dbname s
 		return nil, err
 	}
 
-	defer db.Close()
+	db.SetMaxIdleConns(512)
+	db.SetMaxOpenConns(1024)
+
+	// defer db.Close()
 
 	err = db.Ping()
 
@@ -97,6 +101,7 @@ func NewPgisClient(host string, port int, user string, password string, dbname s
 		Geometry:   "", // use the default geojson geometry
 		Debug:      false,
 		dsn:        dsn,
+		db:         db,
 		conns:      conns,
 	}
 
@@ -107,13 +112,17 @@ func (client *PgisClient) dbconn() (*sql.DB, error) {
 
 	<-client.conns
 
-	db, err := sql.Open("postgres", client.dsn)
+	return client.db, nil
 
-	if err != nil {
-		return nil, err
-	}
+	/*
+		db, err := sql.Open("postgres", client.dsn)
 
-	return db, nil
+		if err != nil {
+			return nil, err
+		}
+
+		return db, nil
+	*/
 }
 
 func (client *PgisClient) IndexFile(abs_path string, collection string) error {
@@ -417,7 +426,7 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 		}
 
 		defer func() {
-			db.Close()
+			// db.Close()
 			client.conns <- true
 		}()
 
