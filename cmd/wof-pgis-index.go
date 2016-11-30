@@ -29,6 +29,7 @@ func main() {
 
 	verbose := flag.Bool("verbose", false, "Be chatty about what's happening. This is automatically enabled if the -debug flag is set.")
 	debug := flag.Bool("debug", false, "Go through all the motions but don't actually index anything.")
+	strict := flag.Bool("strict", false, "Throw fatal errors rather than warning when certain conditions fails.")
 
 	flag.Parse()
 
@@ -93,12 +94,24 @@ func main() {
 			_, err := os.Stat(data_root)
 
 			if os.IsNotExist(err) {
+
+				if !*strict {
+					log.Println("Repo does not contain a data directory", path)
+					continue
+				}
+
 				log.Fatal("Repo does not contain a data directory", path)
 			}
 
 			_, err = os.Stat(meta_root)
 
 			if os.IsNotExist(err) {
+
+				if !*strict {
+					log.Println("Repo does not contain a meta directory", path)
+					continue
+				}
+
 				log.Fatal("Repo does not contain a meta directory", path)
 			}
 
