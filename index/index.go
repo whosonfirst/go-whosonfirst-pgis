@@ -54,12 +54,12 @@ type GeometryMultiPoly struct {
 }
 
 type PgisClient struct {
-	Geometry   string
-	Debug      bool
-	Verbose    bool
-	dsn        string
-	db         *sql.DB
-	conns      chan bool
+	Geometry string
+	Debug    bool
+	Verbose  bool
+	dsn      string
+	db       *sql.DB
+	conns    chan bool
 }
 
 func NewPgisClient(host string, port int, user string, password string, dbname string, maxconns int) (*PgisClient, error) {
@@ -90,11 +90,11 @@ func NewPgisClient(host string, port int, user string, password string, dbname s
 	}
 
 	client := PgisClient{
-		Geometry:   "", // use the default geojson geometry
-		Debug:      false,
-		dsn:        dsn,
-		db:         db,
-		conns:      conns,
+		Geometry: "", // use the default geojson geometry
+		Debug:    false,
+		dsn:      dsn,
+		db:       db,
+		conns:    conns,
 	}
 
 	return &client, nil
@@ -624,19 +624,19 @@ func (client *PgisClient) Prune(data_root string, delete bool) error {
 	for rows.Next() {
 
 		var wofid int
-		var meta string
+		var str_meta string
 
-		if err := rows.Scan(&wofid, &meta); err != nil {
+		if err := rows.Scan(&wofid, &str_meta); err != nil {
 			return err
 		}
 
 		wg.Add(1)
 
-		go func (data_root string, wofid int, str_meta string) {
+		go func(data_root string, wofid int, str_meta string) {
 
 			defer func() {
 				wg.Done()
-			} ()
+			}()
 
 			var meta Meta
 
@@ -645,32 +645,49 @@ func (client *PgisClient) Prune(data_root string, delete bool) error {
 			if err != nil {
 				return
 			}
-			
+
 			repo := filepath.Join(data_root, meta.Repo)
 			data := filepath.Join(repo, "data")
 
-			path, err := uri.Id2AbsPath(data, wofid)
+			wof_path, err := uri.Id2AbsPath(data, wofid)
 
 			if err != nil {
 				return
 			}
 
-			log.Println(path)
-
-			_, err = os.Stat(path)
+			_, err = os.Stat(wof_path)
 
 			if os.IsExist(err) {
-			   	return
+				return
 			}
 
 			if !os.IsNotExist(err) {
-			   return
+				return
 			}
 
-			log.Printf("%s does not exist\n", path)
-			return 
+			log.Printf("%s does not exist\n", wof_path)
 
-		}(data_root, wofid, meta)
+			if delete {
+
+				db, err := client.dbconn()
+
+				if err != nil {
+					return
+				}
+
+				defer func() {
+					client.conns <- true
+				}()
+
+				sql := "DELETE FROM whosonfirst WHERE id=%s"
+				_, err = db.Exec(sql, wofid)
+
+				if err != nil {
+					log.Println(sql, wofid, err)
+				}
+			}
+
+		}(data_root, wofid, str_meta)
 	}
 
 	wg.Wait()

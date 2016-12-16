@@ -45,6 +45,6 @@ func main() {
 	err = client.Prune(*data_root, *delete)
 
 	if err != nil {
-	   	log.Fatal(err)
+		log.Fatal(err)
 	}
 }
