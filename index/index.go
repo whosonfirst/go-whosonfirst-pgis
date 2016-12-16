@@ -619,6 +619,13 @@ func (client *PgisClient) Prune(data_root string, delete bool) error {
 		return err
 	}
 
+	count := runtime.GOMAXPROCS(0) // perversely this is how we get the count...
+	throttle := make(chan bool, count)
+
+	for i := 0; i < count; i++ {
+		throttle <- true
+	}
+
 	wg := new(sync.WaitGroup)
 
 	for rows.Next() {
@@ -630,12 +637,15 @@ func (client *PgisClient) Prune(data_root string, delete bool) error {
 			return err
 		}
 
+		<-throttle
+
 		wg.Add(1)
 
-		go func(data_root string, wofid int, str_meta string) {
+		go func(data_root string, wofid int, str_meta string, throttle chan bool) {
 
 			defer func() {
 				wg.Done()
+				throttle <- true
 			}()
 
 			var meta Meta
@@ -656,10 +666,6 @@ func (client *PgisClient) Prune(data_root string, delete bool) error {
 			}
 
 			_, err = os.Stat(wof_path)
-
-			if os.IsExist(err) {
-				return
-			}
 
 			if !os.IsNotExist(err) {
 				return
@@ -687,7 +693,7 @@ func (client *PgisClient) Prune(data_root string, delete bool) error {
 				}
 			}
 
-		}(data_root, wofid, str_meta)
+		}(data_root, wofid, str_meta, throttle)
 	}
 
 	wg.Wait()
