@@ -3,15 +3,10 @@ package placetypes
 import (
 	"encoding/json"
 	"errors"
-	"github.com/whosonfirst/go-whosonfirst-placetypes/spec"
+	"github.com/whosonfirst/go-whosonfirst-placetypes/placetypes"
+	"log"
 	"strconv"
 )
-
-type WOFPlacetypeSpec map[string]WOFPlacetype
-
-type WOFPlacetypes struct {
-	spec WOFPlacetypeSpec
-}
 
 type WOFPlacetypeName struct {
 	Lang string `json:"language"`
@@ -29,33 +24,80 @@ type WOFPlacetype struct {
 	// AltNames []WOFPlacetypeAltNames		`json:"names"`
 }
 
-func Init() (*WOFPlacetypes, error) {
+type WOFPlacetypeSpecification map[string]WOFPlacetype
 
-	places := placetypes.Spec()
+var specification *WOFPlacetypeSpecification
 
-	var spec WOFPlacetypeSpec
-	err := json.Unmarshal([]byte(places), &spec)
+func init() {
+
+	var err error
+
+	specification, err = Spec()
+
+	if err != nil {
+		log.Fatal("Failed to parse specification", err)
+	}
+}
+
+func Spec() (*WOFPlacetypeSpecification, error) {
+
+	var spec WOFPlacetypeSpecification
+	err := json.Unmarshal([]byte(placetypes.Specification), &spec)
 
 	if err != nil {
 		return nil, err
 	}
 
-	placetypes := WOFPlacetypes{
-		spec: spec,
-	}
-
-	return &placetypes, nil
+	return &spec, nil
 }
 
-func (pt *WOFPlacetypes) GetPlacetypeByName(name string) (*WOFPlacetype, error) {
+func IsValidPlacetype(name string) bool {
 
-	for str_id, pt := range pt.spec {
+	for _, pt := range *specification {
+
+		if pt.Name == name {
+			return true
+		}
+	}
+
+	return false
+}
+
+func IsValidPlacetypeId(id int64) bool {
+
+	for str_id, _ := range *specification {
+
+		pt_id, err := strconv.Atoi(str_id)
+
+		if err != nil {
+			continue
+		}
+
+		pt_id64 := int64(pt_id)
+
+		if pt_id64 == id {
+			return true
+		}
+	}
+
+	return false
+}
+
+func GetPlacetypeByName(name string) (*WOFPlacetype, error) {
+
+	for str_id, pt := range *specification {
 
 		if pt.Name == name {
 
-			id, _ := strconv.Atoi(str_id)
-			pt.Id = int64(id)
+			pt_id, err := strconv.Atoi(str_id)
 
+			if err != nil {
+				continue
+			}
+
+			pt_id64 := int64(pt_id)
+
+			pt.Id = pt_id64
 			return &pt, nil
 		}
 	}
@@ -63,47 +105,23 @@ func (pt *WOFPlacetypes) GetPlacetypeByName(name string) (*WOFPlacetype, error) 
 	return nil, errors.New("Invalid placetype")
 }
 
-/*
-func (sp *WOFPlacetypeSpec) Common() []string {
-	return sp.WithRole("common")
-}
+func GetPlacetypeById(id int64) (*WOFPlacetype, error) {
 
-func (sp *WOFPlacetypeSpec) CommonOptional() []string {
-	return sp.WithRole("common_optional")
-}
+	for str_id, pt := range *specification {
 
-func (sp *WOFPlacetypeSpec) Optional() []string {
-	return sp.WithRole("optional")
-}
+		pt_id, err := strconv.Atoi(str_id)
 
-func (sp *WOFPlacetypeSpec) WithRole(role string) []string {
-
-	places := make([]string, 0)
-
-	for id, placetype := range sp {
-		if placetype.Role != role {
-		   continue
+		if err != nil {
+			continue
 		}
 
-		places = append(places, role)
+		pt_id64 := int64(pt_id)
+
+		if pt_id64 == id {
+			pt.Id = pt_id64
+			return &pt, nil
+		}
 	}
 
-	return places
+	return nil, errors.New("Invalid placetype")
 }
-
-func (sp *WOFPlacetypeSpec) WithRoles(roles []string) []string {
-
-	places := make([]string, 0)
-
-	for _, role := range roles {
-	    places = append(places, sp.WithRole(role))
-	}
-
-	return places
-}
-
-func IsValidRole(role string) bool {
-
-	return false
-}
-*/

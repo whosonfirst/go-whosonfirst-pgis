@@ -11,7 +11,7 @@ import (
 	"github.com/whosonfirst/go-whosonfirst-csv"
 	"github.com/whosonfirst/go-whosonfirst-geojson"
 	"github.com/whosonfirst/go-whosonfirst-placetypes"
-	_ "github.com/whosonfirst/go-whosonfirst-utils"
+	"github.com/whosonfirst/go-whosonfirst-uri"
 	"io"
 	"log"
 	"os"
@@ -55,7 +55,6 @@ type GeometryMultiPoly struct {
 
 type PgisClient struct {
 	Geometry   string
-	Placetypes *placetypes.WOFPlacetypes
 	Debug      bool
 	Verbose    bool
 	dsn        string
@@ -64,12 +63,6 @@ type PgisClient struct {
 }
 
 func NewPgisClient(host string, port int, user string, password string, dbname string, maxconns int) (*PgisClient, error) {
-
-	pt, err := placetypes.Init()
-
-	if err != nil {
-		return nil, err
-	}
 
 	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", host, port, user, password, dbname)
 
@@ -97,7 +90,6 @@ func NewPgisClient(host string, port int, user string, password string, dbname s
 	}
 
 	client := PgisClient{
-		Placetypes: pt,
 		Geometry:   "", // use the default geojson geometry
 		Debug:      false,
 		dsn:        dsn,
@@ -304,7 +296,7 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 
 	placetype := feature.Placetype()
 
-	pt, err := client.Placetypes.GetPlacetypeByName(placetype)
+	pt, err := placetypes.GetPlacetypeByName(placetype)
 
 	if err != nil {
 		return err
@@ -604,6 +596,81 @@ func (client *PgisClient) IndexFileList(abs_path string, collection string) erro
 			ch <- true
 
 		}(path, collection, wg, ch)
+	}
+
+	wg.Wait()
+
+	return nil
+}
+
+func (client *PgisClient) Prune(data_root string, delete bool) error {
+
+	db, err := client.dbconn()
+
+	if err != nil {
+		return err
+	}
+
+	sql := "SELECT id, meta FROM whosonfirst"
+
+	rows, err := db.Query(sql)
+
+	if err != nil {
+		return err
+	}
+
+	wg := new(sync.WaitGroup)
+
+	for rows.Next() {
+
+		var wofid int
+		var meta string
+
+		if err := rows.Scan(&wofid, &meta); err != nil {
+			return err
+		}
+
+		wg.Add(1)
+
+		go func (data_root string, wofid int, str_meta string) {
+
+			defer func() {
+				wg.Done()
+			} ()
+
+			var meta Meta
+
+			err := json.Unmarshal([]byte(str_meta), &meta)
+
+			if err != nil {
+				return
+			}
+			
+			repo := filepath.Join(data_root, meta.Repo)
+			data := filepath.Join(repo, "data")
+
+			path, err := uri.Id2AbsPath(data, wofid)
+
+			if err != nil {
+				return
+			}
+
+			log.Println(path)
+
+			_, err = os.Stat(path)
+
+			if os.IsExist(err) {
+			   	return
+			}
+
+			if !os.IsNotExist(err) {
+			   return
+			}
+
+			log.Printf("%s does not exist\n", path)
+			return 
+
+		}(data_root, wofid, meta)
 	}
 
 	wg.Wait()
