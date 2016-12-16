@@ -619,7 +619,7 @@ func (client *PgisClient) Prune(data_root string, delete bool) error {
 		return err
 	}
 
-	count := runtime.GOMAXPROCS(0) // perversely this is how we get the count...
+	count := runtime.GOMAXPROCS(0)
 	throttle := make(chan bool, count)
 
 	for i := 0; i < count; i++ {
@@ -633,7 +633,9 @@ func (client *PgisClient) Prune(data_root string, delete bool) error {
 		var wofid int
 		var str_meta string
 
-		if err := rows.Scan(&wofid, &str_meta); err != nil {
+		err := rows.Scan(&wofid, &str_meta)
+
+		if err != nil {
 			return err
 		}
 
@@ -685,7 +687,7 @@ func (client *PgisClient) Prune(data_root string, delete bool) error {
 					client.conns <- true
 				}()
 
-				sql := "DELETE FROM whosonfirst WHERE id=%s"
+				sql := "DELETE FROM whosonfirst WHERE id=$1"
 				_, err = db.Exec(sql, wofid)
 
 				if err != nil {
