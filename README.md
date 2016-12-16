@@ -31,6 +31,26 @@ sudo -u postgres psql -c "CREATE INDEX by_placetype ON whosonfirst (placetype_id
 
 _Note that this still lacks indices on things like `placetype_id` and others._
 
+## Utilities
+
+### wof-pgis-index
+
+```
+wof-pgis-index -options (please write me...)
+```
+
+Index one or more Who's On First documents on disk in to your PGIS database.
+
+### wof-pgis-prune
+
+```
+wof-pgis-prune -delete -data-root /path/to/wof-data
+```
+
+This is a simple utility to ensure that the Who's On First records in your PGIS database have corresponding Who's On First records on disk. If there are missing records (on disk) and this program is invoked with the `-delete` flag then that record will be removed from the PGIS database.
+
+Really, this is a utility for when an update goes pear-shaped and you need to clean up after yourself.
+
 ## See also
 
 * http://www.saintsjd.com/2014/08/13/howto-install-postgis-on-ubuntu-trusty.html
