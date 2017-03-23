@@ -35,5 +35,6 @@ fmt:
 	go fmt index/*.go
 
 bin:	self
+	@GOPATH=$(GOPATH) go build -o bin/wof-pgis-connect cmd/wof-pgis-connect.go
 	@GOPATH=$(GOPATH) go build -o bin/wof-pgis-index cmd/wof-pgis-index.go
 	@GOPATH=$(GOPATH) go build -o bin/wof-pgis-prune cmd/wof-pgis-prune.go
