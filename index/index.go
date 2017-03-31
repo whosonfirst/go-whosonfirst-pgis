@@ -67,7 +67,7 @@ func NewPgisClient(host string, port int, user string, password string, dbname s
 	var dsn string
 
 	if password == "" {
-		dsn = fmt.Sprintf("host=%s port=%d user=%s dbname=%s sslmode=disable", host, port, user, password, dbname)
+		dsn = fmt.Sprintf("host=%s port=%d user=%s dbname=%s sslmode=disable", host, port, user, dbname)
 	} else {
 		dsn = fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", host, port, user, password, dbname)
 	}
