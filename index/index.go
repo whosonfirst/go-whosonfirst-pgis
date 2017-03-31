@@ -611,94 +611,111 @@ func (client *PgisClient) Prune(data_root string, delete bool) error {
 		return err
 	}
 
-	sql := "SELECT id, meta FROM whosonfirst"
+	sql_count := "SELECT COUNT(id) FROM whosonfirst"
 
-	rows, err := db.Query(sql)
+	row := db.QueryRow(sql_count)
+
+	var count_rows int
+	err = row.Scan(&count_rows)
 
 	if err != nil {
 		return err
 	}
 
-	count := runtime.GOMAXPROCS(0)
-	throttle := make(chan bool, count)
+	limit := 100000
 
-	for i := 0; i < count; i++ {
-		throttle <- true
-	}
+	for offset := 0; offset < count_rows; offset += limit {
 
-	wg := new(sync.WaitGroup)
+		sql := fmt.Sprintf("SELECT id, meta FROM whosonfirst OFFSET %d LIMIT %d", offset, limit)
+		log.Printf("%s (%d)\n", sql, count_rows)
 
-	for rows.Next() {
-
-		var wofid int
-		var str_meta string
-
-		err := rows.Scan(&wofid, &str_meta)
+		rows, err := db.Query(sql)
 
 		if err != nil {
 			return err
 		}
 
-		<-throttle
+		count := runtime.GOMAXPROCS(0)
+		throttle := make(chan bool, count)
 
-		wg.Add(1)
+		for i := 0; i < count; i++ {
+			throttle <- true
+		}
 
-		go func(data_root string, wofid int, str_meta string, throttle chan bool) {
+		wg := new(sync.WaitGroup)
 
-			defer func() {
-				wg.Done()
-				throttle <- true
-			}()
+		for rows.Next() {
 
-			var meta Meta
+			var wofid int
+			var str_meta string
 
-			err := json.Unmarshal([]byte(str_meta), &meta)
-
-			if err != nil {
-				return
-			}
-
-			repo := filepath.Join(data_root, meta.Repo)
-			data := filepath.Join(repo, "data")
-
-			wof_path, err := uri.Id2AbsPath(data, wofid)
+			err := rows.Scan(&wofid, &str_meta)
 
 			if err != nil {
-				return
+				return err
 			}
 
-			_, err = os.Stat(wof_path)
+			<-throttle
 
-			if !os.IsNotExist(err) {
-				return
-			}
+			wg.Add(1)
 
-			log.Printf("%s does not exist\n", wof_path)
+			go func(data_root string, wofid int, str_meta string, throttle chan bool) {
 
-			if delete {
+				defer func() {
+					wg.Done()
+					throttle <- true
+				}()
 
-				db, err := client.dbconn()
+				var meta Meta
+
+				err := json.Unmarshal([]byte(str_meta), &meta)
 
 				if err != nil {
 					return
 				}
 
-				defer func() {
-					client.conns <- true
-				}()
+				repo := filepath.Join(data_root, meta.Repo)
+				data := filepath.Join(repo, "data")
 
-				sql := "DELETE FROM whosonfirst WHERE id=$1"
-				_, err = db.Exec(sql, wofid)
+				wof_path, err := uri.Id2AbsPath(data, wofid)
 
 				if err != nil {
-					log.Println(sql, wofid, err)
+					return
 				}
-			}
 
-		}(data_root, wofid, str_meta, throttle)
+				_, err = os.Stat(wof_path)
+
+				if !os.IsNotExist(err) {
+					return
+				}
+
+				log.Printf("%s does not exist\n", wof_path)
+
+				if delete {
+
+					db, err := client.dbconn()
+
+					if err != nil {
+						return
+					}
+
+					defer func() {
+						client.conns <- true
+					}()
+
+					sql := "DELETE FROM whosonfirst WHERE id=$1"
+					_, err = db.Exec(sql, wofid)
+
+					if err != nil {
+						log.Println(sql, wofid, err)
+					}
+				}
+
+			}(data_root, wofid, str_meta, throttle)
+		}
+
+		wg.Wait()
 	}
-
-	wg.Wait()
 
 	return nil
 }
