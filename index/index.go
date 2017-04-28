@@ -53,6 +53,33 @@ type GeometryMultiPoly struct {
 	Coordinates MultiPolygon `json:"coordinates"`
 }
 
+type PgisRow struct {
+	Id           int64
+	ParentId     int64
+	PlacetypeId  int64
+	IsSuperseded int
+	IsDeprecated int
+	Meta         string
+	Geom         string
+	Centroid     string
+}
+
+func NewPgisRow(id int64, pid int64, ptid int64, superseded int, deprecated int, meta string, geom string, centroid string) (*PgisRow, error) {
+
+	row := PgisRow{
+		Id:           id,
+		ParentId:     pid,
+		PlacetypeId:  ptid,
+		IsSuperseded: superseded,
+		IsDeprecated: deprecated,
+		Meta:         meta,
+		Geom:         geom,
+		Centroid:     centroid,
+	}
+
+	return &row, nil
+}
+
 type PgisClient struct {
 	Geometry string
 	Debug    bool
@@ -111,6 +138,48 @@ func (client *PgisClient) dbconn() (*sql.DB, error) {
 	<-client.conns
 
 	return client.db, nil
+}
+
+func (client *PgisClient) Connection() (*sql.DB, error) {
+
+	<-client.conns
+
+	return client.db, nil
+}
+
+func (client *PgisClient) GetById(id int64) (*PgisRow, error) {
+
+	db, err := client.dbconn()
+
+	if err != nil {
+		return nil, err
+	}
+
+	var wofid int64
+	var parentid int64
+	var placetypeid int64
+	var superseded int
+	var deprecated int
+	var meta string
+	var geom string
+	var centroid string
+
+	sql := fmt.Sprintf("SELECT id, parent_id, placetype_id, is_superseded, is_deprecated, meta, ST_AsGeoJSON(geom), ST_AsGeoJSON(centroid) FROM whosonfirst WHERE id=$1")
+
+	row := db.QueryRow(sql, id)
+	err = row.Scan(&wofid, &parentid, &placetypeid, &superseded, &deprecated, &meta, &geom, &centroid)
+
+	if err != nil {
+		return nil, err
+	}
+
+	pgrow, err := NewPgisRow(wofid, parentid, placetypeid, superseded, deprecated, meta, geom, centroid)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return pgrow, nil
 }
 
 func (client *PgisClient) IndexFile(abs_path string, collection string) error {
