@@ -30,15 +30,31 @@ type Rtree struct {
 	height      int
 }
 
-// NewTree creates a new R-tree instance.
-func NewTree(Dim, MinChildren, MaxChildren int) *Rtree {
-	rt := Rtree{Dim: Dim, MinChildren: MinChildren, MaxChildren: MaxChildren}
-	rt.height = 1
-	rt.root = &node{}
-	rt.root.entries = []entry{}
-	rt.root.leaf = true
-	rt.root.level = 1
-	return &rt
+// NewTree returns an Rtree. If the number of objects given on initialization
+// is larger than max, the Rtree will be initialized using the Overlap
+// Minimizing Top-down bulk-loading algorithm.
+func NewTree(dim, min, max int, objs ...Spatial) *Rtree {
+	rt := &Rtree{
+		Dim:         dim,
+		MinChildren: min,
+		MaxChildren: max,
+		height:      1,
+		root: &node{
+			entries: []entry{},
+			leaf:    true,
+			level:   1,
+		},
+	}
+
+	if len(objs) <= rt.MaxChildren {
+		for _, obj := range objs {
+			rt.Insert(obj)
+		}
+	} else {
+		rt.bulkLoad(objs)
+	}
+
+	return rt
 }
 
 // Size returns the number of objects currently stored in tree.
@@ -53,6 +69,145 @@ func (tree *Rtree) String() string {
 // Depth returns the maximum depth of tree.
 func (tree *Rtree) Depth() int {
 	return tree.height
+}
+
+type dimSorter struct {
+	dim  int
+	objs []entry
+}
+
+func (s *dimSorter) Len() int {
+	return len(s.objs)
+}
+
+func (s *dimSorter) Swap(i, j int) {
+	s.objs[i], s.objs[j] = s.objs[j], s.objs[i]
+}
+
+func (s *dimSorter) Less(i, j int) bool {
+	return s.objs[i].bb.p[s.dim] < s.objs[j].bb.p[s.dim]
+}
+
+// splitByM splits objects into slices of maximum m elements.
+// Split 10 in to 3 will yield 3 + 3 + 3 + 1
+func splitByM(m int, objs []entry) [][]entry {
+	perSlice := len(objs) / m
+
+	numSlices := m
+	if len(objs)%m != 0 {
+		numSlices++
+	}
+
+	split := make([][]entry, numSlices)
+	for i := 0; i < numSlices; i++ {
+		if i == numSlices-1 {
+			split[i] = objs[i*perSlice:]
+			break
+		}
+
+		split[i] = objs[i*perSlice : i*perSlice+perSlice]
+	}
+
+	return split
+}
+
+// splitInS splits objects into s slices and puts the left over elements in the
+// last slice.
+// Split 10 in to 3 will yield 3 + 3 + 4
+func splitInS(s int, objs []entry) [][]entry {
+	split := splitByM(s, objs)
+	if len(split) < 2 {
+		return split
+	}
+
+	last := split[len(split)-1]
+	secondLast := split[len(split)-2]
+
+	if len(last) < len(secondLast) {
+		merged := append(secondLast, last...)
+		split = split[:len(split)-1]
+		split[len(split)-1] = merged
+	}
+
+	return split
+}
+
+func sortByDim(dim int, objs []entry) {
+	sort.Sort(&dimSorter{dim, objs})
+}
+
+// bulkLoad bulk loads the Rtree using OMT algorithm. bulkLoad contains special
+// handling for the root node.
+func (tree *Rtree) bulkLoad(objs []Spatial) {
+	n := len(objs)
+
+	// create entries for all the objects
+	entries := make([]entry, n)
+	for i := range objs {
+		entries[i] = entry{
+			bb:  objs[i].Bounds(),
+			obj: objs[i],
+		}
+	}
+
+	// root will never be a leaf in the bulk-loaded tree
+	tree.root.leaf = false
+	tree.size = n
+	// following equations are defined in the paper describing OMT
+	tree.height = int(math.Ceil(math.Log(float64(n)) / float64(math.Log(float64(tree.MaxChildren)))))
+	tree.root.level = tree.height
+	nsub := int(math.Pow(float64(tree.MaxChildren), float64(tree.height-1)))
+	s := int(math.Floor(math.Sqrt(math.Ceil(float64(n) / float64(nsub)))))
+
+	sortByDim(0, entries)
+
+	// we can preallocate entries here as we know the root will always be
+	// split into s groups
+	tree.root.entries = make([]entry, s)
+
+	// build the root first as we have to split it differently from the subtrees
+	for i, part := range splitInS(s, entries) {
+		child := tree.omt(tree.root.level-1, part, tree.MaxChildren)
+		child.parent = tree.root
+
+		tree.root.entries[i].bb = child.computeBoundingBox()
+		tree.root.entries[i].child = child
+	}
+}
+
+// omt the is the recursive part of the Overlap Minimizing Top-loading bulk-
+// load approach. Returns the root node of a subtree.
+func (tree *Rtree) omt(level int, objs []entry, m int) *node {
+	// if number of objects is less than or equal than max children per leaf,
+	// we need to create a leaf node
+	if len(objs) <= m {
+		return &node{
+			leaf:    true,
+			entries: objs,
+			level:   level,
+		}
+	}
+
+	// sort the tree on every level by a different dimension than the previous
+	// level, this will prevent overlapping of the branches
+	sortByDim((tree.height-level)%tree.Dim, objs)
+
+	n := &node{
+		level:   level,
+		entries: make([]entry, 0, m),
+	}
+
+	for _, part := range splitByM(m, objs) {
+		child := tree.omt(level-1, part, m)
+		child.parent = n
+
+		n.entries = append(n.entries, entry{
+			bb:    child.computeBoundingBox(),
+			child: child,
+		})
+	}
+
+	return n
 }
 
 // node represents a tree node of an Rtree.
@@ -252,6 +407,22 @@ func (n *node) split(minGroupSize int) (left, right *node) {
 	return
 }
 
+// getAllBoundingBoxes traverses tree populating slice of bounding boxes of non-leaf nodes.
+func (n *node) getAllBoundingBoxes() []*Rect {
+	var rects []*Rect
+	if n.leaf {
+		return rects
+	}
+	for _, e := range n.entries {
+		if e.child == nil {
+			return rects
+		}
+		rectsInter := append(e.child.getAllBoundingBoxes(), e.bb)
+		rects = append(rects, rectsInter...)
+	}
+	return rects
+}
+
 func assign(e entry, group *node) {
 	if e.child != nil {
 		e.child.parent = group
@@ -367,6 +538,8 @@ func (tree *Rtree) DeleteWithComparator(obj Spatial, cmp Comparator) bool {
 	if !tree.root.leaf && len(tree.root.entries) == 1 {
 		tree.root = tree.root.entries[0].child
 	}
+
+	tree.height = tree.root.level
 
 	return true
 }
@@ -484,12 +657,21 @@ func (tree *Rtree) NearestNeighbor(p Point) Spatial {
 	return obj
 }
 
+// GetAllBoundingBoxes returning slice of bounding boxes by traversing tree. Slice
+// includes bounding boxes from all non-leaf nodes.
+func (tree *Rtree) GetAllBoundingBoxes() []*Rect {
+	var rects []*Rect
+	if tree.root != nil {
+		rects = tree.root.getAllBoundingBoxes()
+	}
+	return rects
+}
+
 // utilities for sorting slices of entries
 
 type entrySlice struct {
 	entries []entry
 	dists   []float64
-	pt      Point
 }
 
 func (s entrySlice) Len() int { return len(s.entries) }
@@ -510,7 +692,7 @@ func sortEntries(p Point, entries []entry) ([]entry, []float64) {
 		sorted[i] = entries[i]
 		dists[i] = p.minDist(entries[i].bb)
 	}
-	sort.Sort(entrySlice{sorted, dists, p})
+	sort.Sort(entrySlice{sorted, dists})
 	return sorted, dists
 }
 
@@ -530,6 +712,16 @@ func pruneEntries(p Point, entries []entry, minDists []float64) []entry {
 		}
 	}
 	return pruned
+}
+
+func pruneEntriesMinDist(d float64, entries []entry, minDists []float64) []entry {
+	var i int
+	for ; i < len(entries); i++ {
+		if minDists[i] > d {
+			break
+		}
+	}
+	return entries[:i]
 }
 
 func (tree *Rtree) nearestNeighbor(p Point, n *node, d float64, nearest Spatial) (Spatial, float64) {
@@ -557,54 +749,68 @@ func (tree *Rtree) nearestNeighbor(p Point, n *node, d float64, nearest Spatial)
 }
 
 // NearestNeighbors gets the closest Spatials to the Point.
-func (tree *Rtree) NearestNeighbors(k int, p Point) []Spatial {
-	dists := make([]float64, k)
-	objs := make([]Spatial, k)
-	for i := 0; i < k; i++ {
-		dists[i] = math.MaxFloat64
-		objs[i] = nil
-	}
-	objs, _ = tree.nearestNeighbors(k, p, tree.root, dists, objs)
+func (tree *Rtree) NearestNeighbors(k int, p Point, filters ...Filter) []Spatial {
+	dists := make([]float64, 0, k)
+	objs := make([]Spatial, 0, k)
+	objs, _, _ = tree.nearestNeighbors(k, p, tree.root, dists, objs, filters)
 	return objs
 }
 
 // insert obj into nearest and return the first k elements in increasing order.
-func insertNearest(k int, dists []float64, nearest []Spatial, dist float64, obj Spatial) ([]float64, []Spatial) {
-	i := 0
-	for i < k && dist >= dists[i] {
+func insertNearest(k int, dists []float64, nearest []Spatial, dist float64, obj Spatial, filters []Filter) ([]float64, []Spatial, bool) {
+	i := sort.SearchFloat64s(dists, dist)
+	for i < len(nearest) && dist >= dists[i] {
 		i++
 	}
 	if i >= k {
-		return dists, nearest
+		return dists, nearest, false
 	}
 
-	left, right := dists[:i], dists[i:k-1]
-	updatedDists := make([]float64, k)
-	copy(updatedDists, left)
-	updatedDists[i] = dist
-	copy(updatedDists[i+1:], right)
+	if refuse, abort := applyFilters(nearest, obj, filters); refuse || abort {
+		return dists, nearest, abort
+	}
 
-	leftObjs, rightObjs := nearest[:i], nearest[i:k-1]
-	updatedNearest := make([]Spatial, k)
-	copy(updatedNearest, leftObjs)
-	updatedNearest[i] = obj
-	copy(updatedNearest[i+1:], rightObjs)
+	// no resize since cap = k
+	if len(nearest) < k {
+		dists = append(dists, 0)
+		nearest = append(nearest, nil)
+	}
 
-	return updatedDists, updatedNearest
+	left, right := dists[:i], dists[i:len(dists)-1]
+	copy(dists, left)
+	copy(dists[i+1:], right)
+	dists[i] = dist
+
+	leftObjs, rightObjs := nearest[:i], nearest[i:len(nearest)-1]
+	copy(nearest, leftObjs)
+	copy(nearest[i+1:], rightObjs)
+	nearest[i] = obj
+
+	return dists, nearest, false
 }
 
-func (tree *Rtree) nearestNeighbors(k int, p Point, n *node, dists []float64, nearest []Spatial) ([]Spatial, []float64) {
+func (tree *Rtree) nearestNeighbors(k int, p Point, n *node, dists []float64, nearest []Spatial, filters []Filter) ([]Spatial, []float64, bool) {
+	var abort bool
 	if n.leaf {
 		for _, e := range n.entries {
-			dist := math.Sqrt(p.minDist(e.bb))
-			dists, nearest = insertNearest(k, dists, nearest, dist, e.obj)
+			dist := p.minDist(e.bb)
+			dists, nearest, abort = insertNearest(k, dists, nearest, dist, e.obj, filters)
+			if abort {
+				break
+			}
 		}
 	} else {
 		branches, branchDists := sortEntries(p, n.entries)
-		branches = pruneEntries(p, branches, branchDists)
+		// only prune if buffer has k elements
+		if l := len(dists); l >= k {
+			branches = pruneEntriesMinDist(dists[l-1], branches, branchDists)
+		}
 		for _, e := range branches {
-			nearest, dists = tree.nearestNeighbors(k, p, e.child, dists, nearest)
+			nearest, dists, abort = tree.nearestNeighbors(k, p, e.child, dists, nearest, filters)
+			if abort {
+				break
+			}
 		}
 	}
-	return nearest, dists
+	return nearest, dists, abort
 }

@@ -2,9 +2,7 @@ package pgis
 
 import (
 	"bufio"
-	"crypto/md5"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +12,7 @@ import (
 	"github.com/whosonfirst/go-whosonfirst-geojson"
 	"github.com/whosonfirst/go-whosonfirst-placetypes"
 	"github.com/whosonfirst/go-whosonfirst-uri"
+	"github.com/whosonfirst/go-whosonfirst-utils"
 	"io"
 	"log"
 	"os"
@@ -84,16 +83,7 @@ func NewPgisRow(id int64, pid int64, ptid int64, superseded int, deprecated int,
 
 func (row *PgisRow) GeomHash() (string, error) {
 
-	body, err := json.Marshal(row.Geom)
-
-	if err != nil {
-		return "", err
-	}
-
-	hash := md5.Sum(body)
-	geom_hash := hex.EncodeToString(hash[:])
-
-	return geom_hash, nil
+	return utils.HashFromJSON([]byte(row.Geom))
 }
 
 type PgisClient struct {

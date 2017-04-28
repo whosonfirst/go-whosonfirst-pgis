@@ -29,3 +29,4 @@ fmt:	self
 
 bin:	self
 	@GOPATH=$(GOPATH) go build -o bin/wof-expand cmd/wof-expand.go
+	@GOPATH=$(GOPATH) go build -o bin/wof-cat cmd/wof-cat.go

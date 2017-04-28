@@ -5,14 +5,16 @@ import (
 	"fmt"
 	"github.com/whosonfirst/go-whosonfirst-uri"
 	"log"
+	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
 
 func main() {
 
-	var root = flag.String("root", "", "A root directory for absolute paths")
+	var root = flag.String("root", "", "The directory where Who's On First records are stored. If empty defaults to the current working directory + \"/data\".")
 	var prefix = flag.String("prefix", "", "Prepend this prefix to all paths")
 
 	var alt = flag.Bool("alternate", false, "Encode URI as an alternate geometry")
@@ -22,6 +24,17 @@ func main() {
 	var extras = flag.String("extras", "", "A comma-separated list of extra information to include with an alternate geometry (optional)")
 
 	flag.Parse()
+
+	if *root == "" {
+
+		cwd, err := os.Getwd()
+
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		*root = filepath.Join(cwd, "data")
+	}
 
 	for _, str_id := range flag.Args() {
 
