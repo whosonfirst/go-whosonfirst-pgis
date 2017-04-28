@@ -1,7 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
+	"fmt"
+	"github.com/tidwall/pretty"
 	"github.com/whosonfirst/go-whosonfirst-pgis/index"
 	"log"
 	"os"
@@ -42,13 +45,29 @@ func main() {
 			log.Fatal(err)
 		}
 
-		hash, err := row.GeomHash()
+		fmt.Printf("# ID\n\n%d\n\n", row.Id)
+		fmt.Printf("# Parent ID\n\n%d\n\n", row.ParentId)
+		fmt.Printf("# Placetype ID\n\n%d\n\n", row.PlacetypeId)
+		fmt.Printf("# Superseded\n\n%d\n\n", row.IsSuperseded)
+		fmt.Printf("# Deprecated\n\n%d\n\n", row.IsDeprecated)
 
-		if err != nil {
-			log.Fatal(err)
-		}
+		var m interface{}
+		var b []byte
 
-		log.Println(hash)
+		json.Unmarshal([]byte(row.Meta), &m)
+		b, _ = json.Marshal(m)
+
+		fmt.Printf("# Meta\n\n```\n%s\n```\n\n", string(pretty.Pretty(b)))
+
+		json.Unmarshal([]byte(row.Centroid), &m)
+		b, _ = json.Marshal(m)
+
+		fmt.Printf("# Centroid\n\n```\n%s\n```\n\n", string(pretty.Pretty(b)))
+
+		json.Unmarshal([]byte(row.Geom), &m)
+		b, _ = json.Marshal(m)
+
+		fmt.Printf("# Geom\n\n```\n%s\n```\n\n", string(pretty.Pretty(b)))
 	}
 
 	os.Exit(0)
