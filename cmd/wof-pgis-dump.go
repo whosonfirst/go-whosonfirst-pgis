@@ -42,7 +42,13 @@ func main() {
 			log.Fatal(err)
 		}
 
-		log.Println(row.Id)
+		hash, err := row.GeomHash()
+
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		log.Println(hash)
 	}
 
 	os.Exit(0)

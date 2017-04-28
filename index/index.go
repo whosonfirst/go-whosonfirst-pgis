@@ -2,7 +2,9 @@ package pgis
 
 import (
 	"bufio"
+	"crypto/md5"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -78,6 +80,20 @@ func NewPgisRow(id int64, pid int64, ptid int64, superseded int, deprecated int,
 	}
 
 	return &row, nil
+}
+
+func (row *PgisRow) GeomHash() (string, error) {
+
+	body, err := json.Marshal(row.Geom)
+
+	if err != nil {
+		return "", err
+	}
+
+	hash := md5.Sum(body)
+	geom_hash := hex.EncodeToString(hash[:])
+
+	return geom_hash, nil
 }
 
 type PgisClient struct {
