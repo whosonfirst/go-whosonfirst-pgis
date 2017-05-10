@@ -21,7 +21,7 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
-	_ "time"
+	"time"
 )
 
 type Meta struct {
@@ -444,20 +444,16 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 
 	str_meta := string(meta_json)
 
-	/*
+	f := []byte(feature.Dumps())
+	geom_hash, err := utils.HashGeomFromFeature(f)
 
-		CREATE TABLE whosonfirst (
-		id BIGINT PRIMARY KEY,
-		parent_id BIGINT,
-		placetype_id BIGINT,
-		is_superseded SMALLINT,
-		is_deprecated SMALLINT,
-		meta JSON,
-		geom GEOGRAPHY(MULTIPOLYGON, 4326),
-		centroid GEOGRAPHY(POINT, 4326)
-		)
+	if err != nil {
+		log.Printf("FAILED to hash geom because, %s\n", err)
+		return err
+	}
 
-	*/
+	now := time.Now()
+	lastmod := now.Format(time.RFC3339)
 
 	// http://postgis.net/docs/ST_GeomFromGeoJSON.html
 
@@ -475,7 +471,7 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 			st_geojson = "ST_GeomFromGeoJSON('...')"
 		}
 
-		log.Println("INSERT INTO whosonfirst (id, parent_id, placetype_id, is_superseded, is_deprecated, meta, geom) VALUES (%s, %s, %s, %s, %s, %s, %s)", wofid, parent, pt.Id, is_superseded, is_deprecated, str_meta, st_geojson, st_centroid)
+		log.Println("INSERT INTO whosonfirst (id, parent_id, placetype_id, is_superseded, is_deprecated, meta, geom_hash, lastmod, geom, centroid) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)", wofid, parent, pt.Id, is_superseded, is_deprecated, str_meta, geom_hash, lastmod, st_geojson, st_centroid)
 
 		st_geojson = actual_st_geojson
 	}
@@ -499,21 +495,21 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 
 		if str_geom != "" && str_centroid != "" {
 
-			sql = fmt.Sprintf("INSERT INTO whosonfirst (id, parent_id, placetype_id, is_superseded, is_deprecated, meta, geom, centroid) VALUES ($1, $2, $3, $4, $5, $6, %s, %s) ON CONFLICT(id) DO UPDATE SET parent_id=$7, placetype_id=$8, is_superseded=$9, is_deprecated=$10, meta=$11, geom=%s, centroid=%s", st_geojson, st_centroid, st_geojson, st_centroid)
+			sql = fmt.Sprintf("INSERT INTO whosonfirst (id, parent_id, placetype_id, is_superseded, is_deprecated, meta, geom_hash, lastmod, geom, centroid) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, %s, %s) ON CONFLICT(id) DO UPDATE SET parent_id=$9, placetype_id=$10, is_superseded=$11, is_deprecated=$12, meta=$13, geom_hash=$14, lastmod=$15, geom=%s, centroid=%s", st_geojson, st_centroid, st_geojson, st_centroid)
 
 		} else if str_geom != "" {
 
-			sql = fmt.Sprintf("INSERT INTO whosonfirst (id, parent_id, placetype_id, is_superseded, is_deprecated, meta, geom) VALUES ($1, $2, $3, $4, $5, $6, %s) ON CONFLICT(id) DO UPDATE SET parent_id=$7, placetype_id=$8, is_superseded=$9, is_deprecated=$10, meta=$11, geom=%s", st_geojson, st_geojson)
+			sql = fmt.Sprintf("INSERT INTO whosonfirst (id, parent_id, placetype_id, is_superseded, is_deprecated, meta, geom_hash, lastmod, xgeom, centroid) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, %s) ON CONFLICT(id) DO UPDATE SET parent_id=$9, placetype_id=$10, is_superseded=$11, is_deprecated=$12, meta=$13, geom_hash=$14, lastmod=$15, geom=%s", st_geojson, st_geojson)
 
 		} else if str_centroid != "" {
 
-			sql = fmt.Sprintf("INSERT INTO whosonfirst (id, parent_id, placetype_id, is_superseded, is_deprecated, meta, centroid) VALUES ($1, $2, $3, $4, $5, $6, %s) ON CONFLICT(id) DO UPDATE SET parent_id=$7, placetype_id=$8, is_superseded=$9, is_deprecated=$10, meta=$11, centroid=%s", st_centroid, st_centroid)
+			sql = fmt.Sprintf("INSERT INTO whosonfirst (id, parent_id, placetype_id, is_superseded, is_deprecated, meta, geom_hash, lastmod, centroid) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, %s) ON CONFLICT(id) DO UPDATE SET parent_id=$9, placetype_id=$10, is_superseded=$11, is_deprecated=$12, meta=$13, geom_hash=$14, lastmod=$15, centroid=%s", st_centroid, st_centroid)
 
 		} else {
 			// this should never happend
 		}
 
-		_, err = db.Exec(sql, wofid, parent, pt.Id, is_superseded, is_deprecated, str_meta, parent, pt.Id, is_superseded, is_deprecated, str_meta)
+		_, err = db.Exec(sql, wofid, parent, pt.Id, is_superseded, is_deprecated, str_meta, geom_hash, lastmod, parent, pt.Id, is_superseded, is_deprecated, str_meta, geom_hash, lastmod)
 
 		if err != nil {
 
