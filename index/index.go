@@ -723,7 +723,7 @@ func (client *PgisClient) Prune(data_root string, delete bool) error {
 
 		for rows.Next() {
 
-			var wofid int
+			var wofid int64
 			var str_meta string
 
 			err := rows.Scan(&wofid, &str_meta)
@@ -736,7 +736,7 @@ func (client *PgisClient) Prune(data_root string, delete bool) error {
 
 			wg.Add(1)
 
-			go func(data_root string, wofid int, str_meta string, throttle chan bool) {
+			go func(data_root string, wofid int64, str_meta string, throttle chan bool) {
 
 				defer func() {
 					wg.Done()
