@@ -47,9 +47,9 @@ func NewAlternateURIArgs(source string, function string, extras ...string) *URIA
 
 // See also: https://github.com/whosonfirst/whosonfirst-cookbook/blob/master/how_to/creating_alt_geometries.md
 
-func Id2Fname(id int, args ...*URIArgs) (string, error) {
+func Id2Fname(id int64, args ...*URIArgs) (string, error) {
 
-	str_id := strconv.Itoa(id)
+	str_id := strconv.FormatInt(id, 10)
 	parts := []string{str_id}
 
 	if len(args) == 1 {
@@ -91,10 +91,10 @@ func Id2Fname(id int, args ...*URIArgs) (string, error) {
 	return fname, nil
 }
 
-func Id2Path(id int) (string, error) {
+func Id2Path(id int64) (string, error) {
 
 	parts := []string{}
-	input := strconv.Itoa(id)
+	input := strconv.FormatInt(id, 10)
 
 	for len(input) > 3 {
 
@@ -111,7 +111,7 @@ func Id2Path(id int) (string, error) {
 	return path, nil
 }
 
-func Id2RelPath(id int, args ...*URIArgs) (string, error) {
+func Id2RelPath(id int64, args ...*URIArgs) (string, error) {
 
 	fname, err := Id2Fname(id, args...)
 
@@ -129,7 +129,7 @@ func Id2RelPath(id int, args ...*URIArgs) (string, error) {
 	return rel_path, nil
 }
 
-func Id2AbsPath(root string, id int, args ...*URIArgs) (string, error) {
+func Id2AbsPath(root string, id int64, args ...*URIArgs) (string, error) {
 
 	rel, err := Id2RelPath(id, args...)
 
@@ -256,7 +256,7 @@ func RepoFromPath(path string) (string, error) {
 		return "", err
 	}
 
-	rel_path, err := Id2RelPath(int(wofid)) // AAAAAARRRRGGGGGHHHHH
+	rel_path, err := Id2RelPath(wofid)
 
 	if err != nil {
 		return "", err
