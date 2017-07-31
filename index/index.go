@@ -34,29 +34,6 @@ type Meta struct {
 	Hierarchy []map[string]int `json:"wof:hierarchy"`
 }
 
-type Coords []float64
-
-type LinearRing []Coords
-
-type Polygon []LinearRing
-
-type MultiPolygon []Polygon
-
-type Geometry struct {
-	Type        string `json:"type"`
-	Coordinates Coords `json:"coordinates"`
-}
-
-type GeometryPoly struct {
-	Type        string  `json:"type"`
-	Coordinates Polygon `json:"coordinates"`
-}
-
-type GeometryMultiPoly struct {
-	Type        string       `json:"type"`
-	Coordinates MultiPolygon `json:"coordinates"`
-}
-
 type PgisRow struct {
 	Id           int64
 	ParentId     int64
