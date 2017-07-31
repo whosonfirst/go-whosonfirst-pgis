@@ -9,10 +9,11 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/whosonfirst/go-whosonfirst-crawl"
 	"github.com/whosonfirst/go-whosonfirst-csv"
-	"github.com/whosonfirst/go-whosonfirst-geojson"
+	"github.com/whosonfirst/go-whosonfirst-geojson-v2"
+	"github.com/whosonfirst/go-whosonfirst-geojson-v2/feature"
+	wof "github.com/whosonfirst/go-whosonfirst-geojson-v2/properties/whosonfirst"
 	"github.com/whosonfirst/go-whosonfirst-placetypes"
 	"github.com/whosonfirst/go-whosonfirst-uri"
-	"github.com/whosonfirst/go-whosonfirst-utils"
 	"io"
 	"log"
 	"os"
@@ -190,10 +191,27 @@ func (client *PgisClient) GetById(id int64) (*PgisRow, error) {
 
 func (client *PgisClient) IndexFile(abs_path string, collection string) error {
 
-	// check to see if this is an alt file
-	// https://github.com/whosonfirst/go-whosonfirst-tile38/issues/1
+	is_wof, err := uri.IsWOFFile(abs_path)
 
-	feature, err := geojson.UnmarshalFile(abs_path)
+	if err != nil {
+		return err
+	}
+
+	if !is_wof {
+		return errors.New("Not a valid WOF file")
+	}
+
+	is_alt, err := uri.IsAltFile(abs_path)
+
+	if err != nil {
+		return err
+	}
+
+	if is_alt {
+		return nil
+	}
+
+	feature, err := feature.LoadWOFFeatureFromFile(abs_path)
 
 	if err != nil {
 		return err
@@ -202,9 +220,9 @@ func (client *PgisClient) IndexFile(abs_path string, collection string) error {
 	return client.IndexFeature(feature, collection)
 }
 
-func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection string) error {
+func (client *PgisClient) IndexFeature(feature geojson.Feature, collection string) error {
 
-	wofid := feature.Id()
+	wofid := wof.Id(feature)
 
 	if wofid == 0 {
 		log.Println("skipping Earth because it confused PostGIS")
@@ -213,122 +231,16 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 
 	str_wofid := strconv.Itoa(wofid)
 
-	body := feature.Body()
-
 	str_geom := ""
 	str_centroid := ""
 
 	if client.Geometry == "" {
 
-		var geom_type string
-		geom_type, _ = body.Path("geometry.type").Data().(string)
-
-		if geom_type == "MultiPolygon" {
-
-			geom := body.Path("geometry")
-			str_geom = geom.String()
-
-		} else if geom_type == "Polygon" {
-
-			polys := make([]Polygon, 0)
-
-			for _, p := range feature.GeomToPolygons() {
-
-				poly := make([]LinearRing, 0)
-				ring := make([]Coords, 0)
-
-				for _, po := range p.OuterRing.Points() {
-
-					coord := Coords{po.Lng(), po.Lat()}
-					ring = append(ring, coord)
-				}
-
-				poly = append(poly, ring)
-
-				for _, pi := range p.InteriorRings {
-
-					ring := make([]Coords, 0)
-
-					for _, pt := range pi.Points() {
-
-						coord := Coords{pt.Lng(), pt.Lat()}
-						ring = append(ring, coord)
-					}
-
-					poly = append(poly, ring)
-				}
-
-				polys = append(polys, poly)
-			}
-
-			multi := GeometryMultiPoly{
-				Type:        "MultiPolygon",
-				Coordinates: polys,
-			}
-
-			geom, _ := json.Marshal(multi)
-			str_geom = string(geom)
-
-		} else if geom_type == "Point" {
-
-			geom := body.Path("geometry")
-			str_centroid = geom.String()
-
-			// note we are leaving str_geom empty since it is not
-			// a multipolygon... because postgis
-
-		} else {
-			log.Println("GEOM TYPE IS", geom_type)
-			return errors.New("DO SOMETHING HERE")
-		}
+		return errors.New("Please implement me")
 
 	} else if client.Geometry == "bbox" {
 
-		/*
-
-			This is not really the best way to deal with the problem since
-			we'll end up with an oversized bounding box. A better way would
-			be to store the bounding box for each polygon in the geom and
-			flag that in the key name. Which is easy but just requires tweaking
-			a few things and really I just want to see if this works at all
-			from a storage perspective right now (20160902/thisisaaronland)
-
-		*/
-
-		var swlon float64
-		var swlat float64
-		var nelon float64
-		var nelat float64
-
-		children, _ := body.S("bbox").Children()
-
-		swlon = children[0].Data().(float64)
-		swlat = children[1].Data().(float64)
-		nelon = children[2].Data().(float64)
-		nelat = children[3].Data().(float64)
-
-		ring := LinearRing{
-			Coords{swlon, swlat},
-			Coords{swlon, nelat},
-			Coords{nelon, nelat},
-			Coords{nelon, swlat},
-			Coords{swlon, swlat},
-		}
-
-		poly := Polygon{ring}
-
-		geom := GeometryPoly{
-			Type:        "Polygon",
-			Coordinates: poly,
-		}
-
-		bytes, err := json.Marshal(geom)
-
-		if err != nil {
-			return err
-		}
-
-		str_geom = string(bytes)
+		return errors.New("Please implement me")
 
 	} else if client.Geometry == "centroid" {
 		// handled below
@@ -338,44 +250,10 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 
 	if str_centroid == "" {
 
-		// sudo put me in go-whosonfirst-geojson?
-		// (20160829/thisisaaronland)
-
-		var lat float64
-		var lon float64
-		var lat_ok bool
-		var lon_ok bool
-
-		lat, lat_ok = body.Path("properties.lbl:latitude").Data().(float64)
-		lon, lon_ok = body.Path("properties.lbl:longitude").Data().(float64)
-
-		if !lat_ok || !lon_ok {
-
-			lat, lat_ok = body.Path("properties.geom:latitude").Data().(float64)
-			lon, lon_ok = body.Path("properties.geom:longitude").Data().(float64)
-		}
-
-		if !lat_ok || !lon_ok {
-			return errors.New("can't find centroid")
-		}
-
-		coords := Coords{lon, lat}
-
-		geom := Geometry{
-			Type:        "Point",
-			Coordinates: coords,
-		}
-
-		bytes, err := json.Marshal(geom)
-
-		if err != nil {
-			return err
-		}
-
-		str_centroid = string(bytes)
+		return errors.New("Please implement me")
 	}
 
-	placetype := feature.Placetype()
+	placetype := wof.Placetype(feature)
 
 	pt, err := placetypes.GetPlacetypeByName(placetype)
 
@@ -383,12 +261,7 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 		return err
 	}
 
-	repo, ok := feature.StringProperty("wof:repo")
-
-	if !ok {
-		msg := fmt.Sprintf("can't find wof:repo for %s", str_wofid)
-		return errors.New(msg)
-	}
+	repo := wof.Repo(feature)
 
 	if repo == "" {
 
@@ -398,35 +271,30 @@ func (client *PgisClient) IndexFeature(feature *geojson.WOFFeature, collection s
 
 	key := str_wofid + "#" + repo
 
-	parent, ok := feature.IntProperty("wof:parent_id")
-
-	if !ok {
-		log.Printf("FAILED to determine parent ID for %s\n", key)
-		parent = -1
-	}
+	parent := wof.ParentId(feature)
 
 	is_superseded := 0
 	is_deprecated := 0
+	is_ceased := 0
 
-	if feature.Deprecated() {
+	if wof.IsDeprecated(feature) {
 		is_deprecated = 1
 	}
 
-	if feature.Superseded() {
+	if wof.IsSuperseded(feature) {
+		is_superseded = 1
+	}
+
+	if wof.IsCeased(feature) {
 		is_superseded = 1
 	}
 
 	meta_key := str_wofid + "#meta"
 
-	name := feature.Name()
-	country, ok := feature.StringProperty("wof:country")
+	name := wof.Name(feature)
+	country := wof.Country(feature)
 
-	if !ok {
-		log.Printf("FAILED to determine country for %s\n", meta_key)
-		country = "XX"
-	}
-
-	hier := feature.Hierarchy()
+	hier := wof.Hierarchy(feature)
 
 	meta := Meta{
 		Name:      name,
@@ -590,7 +458,7 @@ func (client *PgisClient) IndexMetaFile(csv_path string, collection string, data
 	return nil
 }
 
-func (client *PgisClient) IndexDirectory(abs_path string, collection string, nfs_kludge bool) error {
+func (client *PgisClient) IndexDirectory(abs_path string, collection string) error {
 
 	re_wof, _ := regexp.Compile(`(\d+)\.geojson$`)
 
@@ -626,8 +494,6 @@ func (client *PgisClient) IndexDirectory(abs_path string, collection string, nfs
 	}
 
 	c := crawl.NewCrawler(abs_path)
-	c.NFSKludge = nfs_kludge
-
 	c.Crawl(cb)
 
 	log.Printf("count %d ok %d error %d\n", count, ok, errs)
