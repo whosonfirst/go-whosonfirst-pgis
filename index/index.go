@@ -9,9 +9,11 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/whosonfirst/go-whosonfirst-crawl"
 	"github.com/whosonfirst/go-whosonfirst-csv"
+	"github.com/whosonfirst/go-whosonfirst-hash"	
 	"github.com/whosonfirst/go-whosonfirst-geojson-v2"
 	"github.com/whosonfirst/go-whosonfirst-geojson-v2/feature"
 	wof "github.com/whosonfirst/go-whosonfirst-geojson-v2/properties/whosonfirst"
+	geom "github.com/whosonfirst/go-whosonfirst-geojson-v2/properties/geometry"	
 	"github.com/whosonfirst/go-whosonfirst-placetypes"
 	"github.com/whosonfirst/go-whosonfirst-uri"
 	"io"
@@ -82,10 +84,9 @@ func NewPgisRow(id int64, pid int64, ptid int64, superseded int, deprecated int,
 	return &row, nil
 }
 
-func (row *PgisRow) GeomHash() (string, error) {
-
-	return utils.HashFromJSON([]byte(row.Geom))
-}
+//func (row *PgisRow) GeomHash() (string, error) {
+//	return utils.HashFromJSON([]byte(row.Geom))
+//}
 
 type PgisClient struct {
 	Geometry string
@@ -229,7 +230,7 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 		return nil
 	}
 
-	str_wofid := strconv.Itoa(wofid)
+	str_wofid := strconv.FormatInt(wofid, 10)
 
 	str_geom := ""
 	str_centroid := ""
@@ -312,8 +313,14 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 
 	str_meta := string(meta_json)
 
-	f := []byte(feature.Dumps())
-	geom_hash, err := utils.HashGeomFromFeature(f)
+	h, err := hash.DefaultHash()
+
+	if err != nil {
+	   return err
+	}
+	
+	geom_str, err := geom.ToString(feature)
+	geom_hash, err := h.HashBytes([]byte(geom_str))
 
 	if err != nil {
 		log.Printf("FAILED to hash geom because, %s\n", err)
