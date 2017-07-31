@@ -18,7 +18,6 @@ func main() {
 
 	procs := flag.Int("procs", 200, "The number of concurrent processes to use importing data.")
 	collection := flag.String("collection", "", "The name of your PostgreSQL database for indexing data.")
-	nfs_kludge := flag.Bool("nfs-kludge", false, "Enable the (walk.go) NFS kludge to ignore 'readdirent: errno' 523 errors")
 
 	pgis_host := flag.String("pgis-host", "localhost", "The host of your PostgreSQL server.")
 	pgis_port := flag.Int("pgis-port", 5432, "The port of your PostgreSQL server.")
@@ -58,7 +57,7 @@ func main() {
 
 		if *mode == "directory" {
 
-			err = client.IndexDirectory(path, *collection, *nfs_kludge)
+			err = client.IndexDirectory(path, *collection)
 
 		} else if *mode == "filelist" {
 

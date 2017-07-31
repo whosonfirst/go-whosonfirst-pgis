@@ -9,11 +9,11 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/whosonfirst/go-whosonfirst-crawl"
 	"github.com/whosonfirst/go-whosonfirst-csv"
-	"github.com/whosonfirst/go-whosonfirst-hash"	
 	"github.com/whosonfirst/go-whosonfirst-geojson-v2"
 	"github.com/whosonfirst/go-whosonfirst-geojson-v2/feature"
+	geom "github.com/whosonfirst/go-whosonfirst-geojson-v2/properties/geometry"
 	wof "github.com/whosonfirst/go-whosonfirst-geojson-v2/properties/whosonfirst"
-	geom "github.com/whosonfirst/go-whosonfirst-geojson-v2/properties/geometry"	
+	"github.com/whosonfirst/go-whosonfirst-hash"
 	"github.com/whosonfirst/go-whosonfirst-placetypes"
 	"github.com/whosonfirst/go-whosonfirst-uri"
 	"io"
@@ -28,10 +28,10 @@ import (
 )
 
 type Meta struct {
-	Name      string           `json:"wof:name"`
-	Country   string           `json:"wof:country"`
-	Repo      string           `json:"wof:repo"`
-	Hierarchy []map[string]int `json:"wof:hierarchy"`
+	Name      string             `json:"wof:name"`
+	Country   string             `json:"wof:country"`
+	Repo      string             `json:"wof:repo"`
+	Hierarchy []map[string]int64 `json:"wof:hierarchy"`
 }
 
 type PgisRow struct {
@@ -60,10 +60,6 @@ func NewPgisRow(id int64, pid int64, ptid int64, superseded int, deprecated int,
 
 	return &row, nil
 }
-
-//func (row *PgisRow) GeomHash() (string, error) {
-//	return utils.HashFromJSON([]byte(row.Geom))
-//}
 
 type PgisClient struct {
 	Geometry string
@@ -247,8 +243,6 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 		return errors.New(msg)
 	}
 
-	key := str_wofid + "#" + repo
-
 	parent := wof.ParentId(feature)
 
 	is_superseded := 0
@@ -264,8 +258,10 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 	}
 
 	if wof.IsCeased(feature) {
-		is_superseded = 1
+		is_ceased = 1
 	}
+
+	log.Println("is ceased", is_ceased)
 
 	meta_key := str_wofid + "#meta"
 
@@ -293,9 +289,9 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 	h, err := hash.DefaultHash()
 
 	if err != nil {
-	   return err
+		return err
 	}
-	
+
 	geom_str, err := geom.ToString(feature)
 	geom_hash, err := h.HashBytes([]byte(geom_str))
 
