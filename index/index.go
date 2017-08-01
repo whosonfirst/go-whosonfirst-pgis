@@ -13,7 +13,7 @@ import (
 	"github.com/whosonfirst/go-whosonfirst-geojson-v2/feature"
 	geom "github.com/whosonfirst/go-whosonfirst-geojson-v2/properties/geometry"
 	wof "github.com/whosonfirst/go-whosonfirst-geojson-v2/properties/whosonfirst"
-	"github.com/whosonfirst/go-whosonfirst-hash"
+	"github.com/whosonfirst/go-whosonfirst-geojson-v2/utils"
 	"github.com/whosonfirst/go-whosonfirst-placetypes"
 	"github.com/whosonfirst/go-whosonfirst-uri"
 	"io"
@@ -205,7 +205,6 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 
 	str_wofid := strconv.FormatInt(wofid, 10)
 
-	str_geom := ""
 	str_centroid := ""
 
 	if client.Geometry == "" {
@@ -285,18 +284,17 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 	}
 
 	str_meta := string(meta_json)
-
-	h, err := hash.DefaultHash()
+	str_geom, err := geom.ToString(feature)
 
 	if err != nil {
+		log.Printf("FAILED to generate str geom, because %s\n", err)
 		return err
 	}
 
-	geom_str, err := geom.ToString(feature)
-	geom_hash, err := h.HashBytes([]byte(geom_str))
+	geom_hash, err := utils.HashGeometry([]byte(str_geom))
 
 	if err != nil {
-		log.Printf("FAILED to hash geom because, %s\n", err)
+		log.Printf("FAILED to hash geom, because %s\n", err)
 		return err
 	}
 

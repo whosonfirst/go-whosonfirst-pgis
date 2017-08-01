@@ -12,6 +12,8 @@ import (
 
 func main() {
 
+	show_geom := flag.Bool("geom", false, "...")
+
 	flag.Parse()
 	args := flag.Args()
 
@@ -29,8 +31,6 @@ func main() {
 		fmt.Printf("WOF ID is %d\n", whosonfirst.Id(f))
 		fmt.Printf("Name is %s\n", f.Name())
 		fmt.Printf("Placetype is %s\n", f.Placetype())
-
-		// fmt.Printf("Hierarchy is %s\n", f.Hierarchy())
 
 		coord, _ := utils.NewCoordinateFromLatLons(0.0, 0.0)
 		contains, _ := f.ContainsCoord(coord)
@@ -56,7 +56,9 @@ func main() {
 			log.Fatal(err)
 		}
 
-		fmt.Println(str_geom)
+		if *show_geom {
+			fmt.Println(str_geom)
+		}
 	}
 
 }

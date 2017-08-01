@@ -27,6 +27,8 @@ rmdeps:
 deps:   rmdeps
 	@GOPATH=$(GOPATH) go get -u "github.com/skelterjohn/geom"
 	@GOPATH=$(GOPATH) go get -u "github.com/tidwall/gjson"
+	# @GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-export"
+	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-hash"
 	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-placetypes"
 
 vendor-deps: deps
@@ -47,3 +49,4 @@ fmt:
 
 bin:	self
 	@GOPATH=$(GOPATH) go build -o bin/wof-geojson-dump cmd/wof-geojson-dump.go
+	@GOPATH=$(GOPATH) go build -o bin/wof-geojson-hash cmd/wof-geojson-hash.go

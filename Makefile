@@ -12,6 +12,7 @@ self:   prep
 	cp -r index src/github.com/whosonfirst/go-whosonfirst-pgis/index
 	cp -r vendor/src/* src/
 	cp -r vendor/src/github.com/whosonfirst/go-whosonfirst-geojson-v2/vendor/src/github.com/tidwall src/github.com/
+	cp -r vendor/src/github.com/whosonfirst/go-whosonfirst-geojson-v2/vendor/src/github.com/whosonfirst/go-whosonfirst-hash src/github.com/whosonfirst/
 
 rmdeps:
 	if test -d src; then rm -rf src; fi 
@@ -20,7 +21,6 @@ deps:
 	@GOPATH=$(GOPATH) go get -u "github.com/tidwall/pretty"
 	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-crawl"
 	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-geojson-v2"
-	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-hash"
 	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-placetypes"
 	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-csv"
 	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-uri"
