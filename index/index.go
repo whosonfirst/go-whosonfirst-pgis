@@ -244,23 +244,25 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 
 	parent := wof.ParentId(feature)
 
-	is_superseded := 0
-	is_deprecated := 0
-	is_ceased := 0
+	is_deprecated, err := wof.IsDeprecated(feature)
 
-	if wof.IsDeprecated(feature) {
-		is_deprecated = 1
+	if err != nil {
+		return err
 	}
 
-	if wof.IsSuperseded(feature) {
-		is_superseded = 1
-	}
+	/*
+		is_ceased, err := wof.IsCeased(feature)
 
-	if wof.IsCeased(feature) {
-		is_ceased = 1
-	}
+		if err != nil {
+		   return err
+		}
+	*/
 
-	log.Println("is ceased", is_ceased)
+	is_superseded, err := wof.IsSuperseded(feature)
+
+	if err != nil {
+		return err
+	}
 
 	meta_key := str_wofid + "#meta"
 
@@ -317,7 +319,7 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 			st_geojson = "ST_GeomFromGeoJSON('...')"
 		}
 
-		log.Println("INSERT INTO whosonfirst (id, parent_id, placetype_id, is_superseded, is_deprecated, meta, geom_hash, lastmod, geom, centroid) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)", wofid, parent, pt.Id, is_superseded, is_deprecated, str_meta, geom_hash, lastmod, st_geojson, st_centroid)
+		log.Println("INSERT INTO whosonfirst (id, parent_id, placetype_id, is_superseded, is_deprecated, meta, geom_hash, lastmod, geom, centroid) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)", wofid, parent, pt.Id, string(is_superseded.Flag()), string(is_deprecated.Flag()), str_meta, geom_hash, lastmod, st_geojson, st_centroid)
 
 		st_geojson = actual_st_geojson
 	}
@@ -355,7 +357,7 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 			// this should never happend
 		}
 
-		_, err = db.Exec(sql, wofid, parent, pt.Id, is_superseded, is_deprecated, str_meta, geom_hash, lastmod, parent, pt.Id, is_superseded, is_deprecated, str_meta, geom_hash, lastmod)
+		_, err = db.Exec(sql, wofid, parent, pt.Id, string(is_superseded.Flag()), string(is_deprecated.Flag()), str_meta, geom_hash, lastmod, parent, pt.Id, string(is_superseded.Flag()), string(is_deprecated.Flag()), str_meta, geom_hash, lastmod)
 
 		if err != nil {
 
