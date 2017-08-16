@@ -28,8 +28,11 @@ deps:   rmdeps
 	@GOPATH=$(GOPATH) go get -u "github.com/skelterjohn/geom"
 	@GOPATH=$(GOPATH) go get -u "github.com/tidwall/gjson"
 	# @GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-export"
+	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-flags"
 	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-hash"
 	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-placetypes"
+	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-spr"
+	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-uri"
 
 vendor-deps: deps
 	if test ! -d vendor; then mkdir vendor; fi
@@ -48,5 +51,7 @@ fmt:
 	go fmt *.go
 
 bin:	self
+	@GOPATH=$(GOPATH) go build -o bin/wof-feature-to-spr cmd/wof-feature-to-spr.go
 	@GOPATH=$(GOPATH) go build -o bin/wof-geojson-dump cmd/wof-geojson-dump.go
+	@GOPATH=$(GOPATH) go build -o bin/wof-geojson-existential cmd/wof-geojson-existential.go
 	@GOPATH=$(GOPATH) go build -o bin/wof-geojson-hash cmd/wof-geojson-hash.go

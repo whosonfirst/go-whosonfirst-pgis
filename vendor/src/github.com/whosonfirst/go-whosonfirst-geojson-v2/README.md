@@ -14,7 +14,9 @@ All of this package's dependencies are bundled with the code in the `vendor` dir
 
 ## Important
 
-This is work in progress. It may change (and break your code) still. This package aims to replace the existing [go-whosonfirst-geojson](https://github.com/whosonfirst/go-whosonfirst-geojson) package.
+This is work in progress. It may change (and break your code) still. This package aims to replace the existing [go-whosonfirst-geojson](https://github.com/whosonfirst/go-whosonfirst-geojson) package. If you want to follow along, please consult:
+
+https://github.com/whosonfirst/go-whosonfirst-geojson-v2/issues/1
 
 ## geojson-v2?
 
@@ -48,6 +50,15 @@ type Feature interface {
 type BoundingBoxes interface {
 	Bounds() []*geom.Rect
 	MBR() geom.Rect
+}
+```
+
+### geojson.Centroid
+
+```
+type Centroid interface {
+	Coord() geom.Coord
+	Source() string
 }
 ```
 

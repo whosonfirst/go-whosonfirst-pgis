@@ -1,12 +1,45 @@
 package whosonfirst
 
 import (
+	"github.com/skelterjohn/geom"
 	"github.com/tidwall/gjson"
+	"github.com/whosonfirst/go-whosonfirst-flags"
+	"github.com/whosonfirst/go-whosonfirst-flags/existential"
 	"github.com/whosonfirst/go-whosonfirst-geojson-v2"
 	"github.com/whosonfirst/go-whosonfirst-geojson-v2/utils"
 )
 
-func Centroid(f geojson.Feature) (float64, float64) {
+type WOFCentroid struct {
+	geojson.Centroid
+	coord  geom.Coord
+	source string
+}
+
+func (c *WOFCentroid) Coord() geom.Coord {
+	return c.coord
+}
+
+func (c *WOFCentroid) Source() string {
+	return c.source
+}
+
+func NewWOFCentroid(lat float64, lon float64, source string) (geojson.Centroid, error) {
+
+	coord, err := utils.NewCoordinateFromLatLons(lat, lon)
+
+	if err != nil {
+		return nil, err
+	}
+
+	c := WOFCentroid{
+		coord:  coord,
+		source: source,
+	}
+
+	return &c, nil
+}
+
+func Centroid(f geojson.Feature) (geojson.Centroid, error) {
 
 	var lat gjson.Result
 	var lon gjson.Result
@@ -15,17 +48,24 @@ func Centroid(f geojson.Feature) (float64, float64) {
 	lon = gjson.GetBytes(f.Bytes(), "properties.lbl:longitude")
 
 	if lat.Exists() && lon.Exists() {
-		return lat.Float(), lon.Float()
+		return NewWOFCentroid(lat.Float(), lon.Float(), "lbl")
+	}
+
+	lat = gjson.GetBytes(f.Bytes(), "properties.reversegeo:latitude")
+	lon = gjson.GetBytes(f.Bytes(), "properties.reversegeo:longitude")
+
+	if lat.Exists() && lon.Exists() {
+		return NewWOFCentroid(lat.Float(), lon.Float(), "reversegeo")
 	}
 
 	lat = gjson.GetBytes(f.Bytes(), "properties.geom:latitude")
 	lon = gjson.GetBytes(f.Bytes(), "properties.geom:longitude")
 
 	if lat.Exists() && lon.Exists() {
-		return lat.Float(), lon.Float()
+		return NewWOFCentroid(lat.Float(), lon.Float(), "geom")
 	}
 
-	return 0.0, 0.0
+	return NewWOFCentroid(0.0, 0.0, "nullisland")
 }
 
 func Country(f geojson.Feature) string {
@@ -85,55 +125,72 @@ func Repo(f geojson.Feature) string {
 	return utils.StringProperty(f.Bytes(), possible, "whosonfirst-data-xx")
 }
 
-func IsCurrent(f geojson.Feature) (bool, bool) {
+func IsCurrent(f geojson.Feature) (flags.ExistentialFlag, error) {
 
 	possible := []string{
-		"properties.mz_iscurrent",
+		"properties.mz:is_current",
 	}
 
 	v := utils.Int64Property(f.Bytes(), possible, -1)
 
-	if v == 1 {
-		return true, true
+	if v == 1 || v == 0 {
+		return existential.NewKnownUnknownFlag(v)
 	}
 
-	if v == 0 {
-		return false, true
+	d, err := IsDeprecated(f)
+
+	if err != nil {
+		return nil, err
 	}
 
-	if IsDeprecated(f) {
-		return false, true
+	if d.IsTrue() && d.IsKnown() {
+		return existential.NewKnownUnknownFlag(0)
 	}
 
-	if IsCeased(f) {
-		return false, true
+	c, err := IsCeased(f)
+
+	if err != nil {
+		return nil, err
 	}
 
-	if IsSuperseded(f) {
-		return false, true
+	if c.IsTrue() && c.IsKnown() {
+		return existential.NewKnownUnknownFlag(0)
 	}
 
-	// as in -1
+	s, err := IsSuperseded(f)
 
-	return false, false
+	if err != nil {
+		return nil, err
+	}
+
+	if s.IsTrue() && s.IsKnown() {
+		return existential.NewKnownUnknownFlag(0)
+	}
+
+	return existential.NewKnownUnknownFlag(-1)
 }
 
-func IsDeprecated(f geojson.Feature) bool {
+func IsDeprecated(f geojson.Feature) (flags.ExistentialFlag, error) {
 
 	possible := []string{
 		"properties.edtf:deprecated",
 	}
 
-	v := utils.StringProperty(f.Bytes(), possible, "uuuu")
+	v := utils.StringProperty(f.Bytes(), possible, "-")
 
-	if v != "" && v != "u" && v != "uuuu" {
-		return true
+	switch v {
+	case "-":
+		return existential.NewKnownUnknownFlag(0)
+	case "u":
+		return existential.NewKnownUnknownFlag(-1)
+	case "uuuu":
+		return existential.NewKnownUnknownFlag(-1)
+	default:
+		return existential.NewKnownUnknownFlag(1)
 	}
-
-	return false
 }
 
-func IsCeased(f geojson.Feature) bool {
+func IsCeased(f geojson.Feature) (flags.ExistentialFlag, error) {
 
 	possible := []string{
 		"properties.edtf:cessation",
@@ -141,43 +198,38 @@ func IsCeased(f geojson.Feature) bool {
 
 	v := utils.StringProperty(f.Bytes(), possible, "uuuu")
 
-	if v != "" && v != "u" && v != "uuuu" {
-		return true
+	switch v {
+	case "":
+		return existential.NewKnownUnknownFlag(0)
+	case "u":
+		return existential.NewKnownUnknownFlag(-1)
+	case "uuuu":
+		return existential.NewKnownUnknownFlag(-1)
+	default:
+		return existential.NewKnownUnknownFlag(1)
 	}
-
-	return false
 }
 
-func IsSuperseded(f geojson.Feature) bool {
-
-	possible := []string{
-		"properties.edtf:superseded",
-	}
-
-	v := utils.StringProperty(f.Bytes(), possible, "uuuu")
-
-	if v != "" && v != "u" && v != "uuuu" {
-		return true
-	}
+func IsSuperseded(f geojson.Feature) (flags.ExistentialFlag, error) {
 
 	by := gjson.GetBytes(f.Bytes(), "properties.wof:superseded_by")
 
 	if by.Exists() && len(by.Array()) > 0 {
-		return true
+		return existential.NewKnownUnknownFlag(1)
 	}
 
-	return false
+	return existential.NewKnownUnknownFlag(0)
 }
 
-func IsSuperseding(f geojson.Feature) bool {
+func IsSuperseding(f geojson.Feature) (flags.ExistentialFlag, error) {
 
 	sc := gjson.GetBytes(f.Bytes(), "properties.wof:supersedes")
 
 	if sc.Exists() && len(sc.Array()) > 0 {
-		return true
+		return existential.NewKnownUnknownFlag(1)
 	}
 
-	return false
+	return existential.NewKnownUnknownFlag(0)
 }
 
 func SupersededBy(f geojson.Feature) []int64 {
