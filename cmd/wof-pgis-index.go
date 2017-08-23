@@ -74,7 +74,7 @@ func main() {
 	err = indexer.IndexPaths(flag.Args())
 
 	if err != nil {
-		logger.Fatal("Failed to index paths because %s", err)
+		logger.Fatal("Failed to index paths in %s mode because %s", *mode, err)
 	}
 
 	os.Exit(0)

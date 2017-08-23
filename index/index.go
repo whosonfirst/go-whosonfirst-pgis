@@ -172,11 +172,11 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 
 	if client.Geometry == "" {
 
-		return errors.New("Please implement me")
+		return errors.New("Please implement support for null client.Geoemtry")
 
 	} else if client.Geometry == "bbox" {
 
-		return errors.New("Please implement me")
+		return errors.New("Please implement support for client.Geoemtry == bbox")
 
 	} else if client.Geometry == "centroid" {
 		// handled below
