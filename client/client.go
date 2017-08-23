@@ -10,9 +10,9 @@ import (
 	geom "github.com/whosonfirst/go-whosonfirst-geojson-v2/properties/geometry"
 	wof "github.com/whosonfirst/go-whosonfirst-geojson-v2/properties/whosonfirst"
 	"github.com/whosonfirst/go-whosonfirst-geojson-v2/utils"
+	"github.com/whosonfirst/go-whosonfirst-log"
 	"github.com/whosonfirst/go-whosonfirst-placetypes"
 	"github.com/whosonfirst/go-whosonfirst-uri"
-	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -59,6 +59,7 @@ type PgisClient struct {
 	Geometry string
 	Debug    bool
 	Verbose  bool
+	Logger	 *log.WOFLogger
 	dsn      string
 	db       *sql.DB
 	conns    chan bool
@@ -97,9 +98,12 @@ func NewPgisClient(host string, port int, user string, password string, dbname s
 		conns <- true
 	}
 
+	logger := log.SimpleWOFLogger("pgis-client")
+
 	client := PgisClient{
 		Geometry: "", // use the default geojson geometry
 		Debug:    false,
+		Logger:	  logger,
 		dsn:      dsn,
 		db:       db,
 		conns:    conns,
@@ -162,31 +166,39 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 	wofid := wof.Id(feature)
 
 	if wofid == 0 {
-		log.Println("skipping Earth because it confused PostGIS")
+		client.Logger.Debug("skipping Earth because it confuses PostGIS")
 		return nil
 	}
 
 	str_wofid := strconv.FormatInt(wofid, 10)
 
-	str_centroid := ""
+	// need to account for this...
+	// 22:18:29.384353 [wof-pgis-index][pgis-client] ERROR failed to execute query because pq: Geometry type (Polygon) does not match column type (MultiPolygon)
 
-	if client.Geometry == "" {
+	str_geom, err := geom.ToString(feature)
 
-		return errors.New("Please implement support for null client.Geoemtry")
-
-	} else if client.Geometry == "bbox" {
-
-		return errors.New("Please implement support for client.Geoemtry == bbox")
-
-	} else if client.Geometry == "centroid" {
-		// handled below
-	} else {
-		return errors.New("unknown geometry filter")
+	if err != nil {
+		return err
 	}
 
-	if str_centroid == "" {
+	centroid, err := wof.Centroid(feature)
 
-		return errors.New("Please implement me")
+	if err != nil {
+		return err
+	}
+
+	client.Logger.Status("Centroid for %d derived from %s", wofid, centroid.Source())
+
+	str_centroid, err := centroid.ToString()
+
+	if err != nil {
+		return err
+	}
+
+	if geom.Type(feature) == "Point" {
+
+		str_centroid = str_geom
+		str_geom = ""
 	}
 
 	placetype := wof.Placetype(feature)
@@ -213,19 +225,14 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 		return err
 	}
 
-	/*
-		is_ceased, err := wof.IsCeased(feature)
-
-		if err != nil {
-		   return err
-		}
-	*/
-
 	is_superseded, err := wof.IsSuperseded(feature)
 
 	if err != nil {
 		return err
 	}
+
+	str_deprecated := fmt.Sprintf("%d", is_deprecated.Flag())
+	str_superseded := fmt.Sprintf("%d", is_superseded.Flag())
 
 	meta_key := str_wofid + "#meta"
 
@@ -244,22 +251,16 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 	meta_json, err := json.Marshal(meta)
 
 	if err != nil {
-		log.Printf("FAILED to marshal JSON on %s because, %v\n", meta_key, err)
+		client.Logger.Warning("FAILED to marshal JSON on %s because, %v\n", meta_key, err)
 		return err
 	}
 
 	str_meta := string(meta_json)
-	str_geom, err := geom.ToString(feature)
-
-	if err != nil {
-		log.Printf("FAILED to generate str geom, because %s\n", err)
-		return err
-	}
 
 	geom_hash, err := utils.HashGeometry([]byte(str_geom))
 
 	if err != nil {
-		log.Printf("FAILED to hash geom, because %s\n", err)
+		client.Logger.Warning("FAILED to hash geom, because %s\n", err)
 		return err
 	}
 
@@ -282,7 +283,7 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 			st_geojson = "ST_GeomFromGeoJSON('...')"
 		}
 
-		log.Println("INSERT INTO whosonfirst (id, parent_id, placetype_id, is_superseded, is_deprecated, meta, geom_hash, lastmod, geom, centroid) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)", wofid, parent, pt.Id, string(is_superseded.Flag()), string(is_deprecated.Flag()), str_meta, geom_hash, lastmod, st_geojson, st_centroid)
+		client.Logger.Status("INSERT INTO whosonfirst (id, parent_id, placetype_id, is_superseded, is_deprecated, meta, geom_hash, lastmod, geom, centroid) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)", wofid, parent, pt.Id, str_superseded, str_deprecated, str_meta, geom_hash, lastmod, st_geojson, st_centroid)
 
 		st_geojson = actual_st_geojson
 	}
@@ -320,21 +321,16 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 			// this should never happend
 		}
 
-		_, err = db.Exec(sql, wofid, parent, pt.Id, string(is_superseded.Flag()), string(is_deprecated.Flag()), str_meta, geom_hash, lastmod, parent, pt.Id, string(is_superseded.Flag()), string(is_deprecated.Flag()), str_meta, geom_hash, lastmod)
+		_, err = db.Exec(sql, wofid, parent, pt.Id, str_superseded, str_deprecated, str_meta, geom_hash, lastmod, parent, pt.Id, str_superseded, str_deprecated, str_meta, geom_hash, lastmod)
 
 		if err != nil {
 
-			log.Println(err)
-			log.Println(sql)
+			client.Logger.Error("failed to execute query because %s", err)
+			client.Logger.Debug("%s", sql)
+
 			os.Exit(1)
 			return err
 		}
-
-		/*
-			rows, _ := rsp.RowsAffected()
-			log.Println("ERR", err)
-			log.Println("ROWS", rows)
-		*/
 	}
 
 	return nil
@@ -365,7 +361,7 @@ func (client *PgisClient) Prune(data_root string, delete bool) error {
 	for offset := 0; offset < count_rows; offset += limit {
 
 		sql := fmt.Sprintf("SELECT id, meta FROM whosonfirst OFFSET %d LIMIT %d", offset, limit)
-		log.Printf("%s (%d)\n", sql, count_rows)
+		client.Logger.Debug("%s (%d)\n", sql, count_rows)
 
 		rows, err := db.Query(sql)
 
@@ -427,7 +423,7 @@ func (client *PgisClient) Prune(data_root string, delete bool) error {
 					return
 				}
 
-				log.Printf("%s does not exist\n", wof_path)
+				client.Logger.Info("%s does not exist\n", wof_path)
 
 				if delete {
 
@@ -445,7 +441,7 @@ func (client *PgisClient) Prune(data_root string, delete bool) error {
 					_, err = db.Exec(sql, wofid)
 
 					if err != nil {
-						log.Println(sql, wofid, err)
+						client.Logger.Warning("Failed to delete %d because %s (%s)", wofid, err, sql)
 					}
 				}
 
