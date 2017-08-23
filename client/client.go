@@ -13,6 +13,7 @@ import (
 	"github.com/whosonfirst/go-whosonfirst-log"
 	"github.com/whosonfirst/go-whosonfirst-placetypes"
 	"github.com/whosonfirst/go-whosonfirst-uri"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -39,6 +40,13 @@ type PgisRow struct {
 	Centroid     string
 }
 
+// this is here so we can pass both sql.Row and sql.Rows to the
+// QueryRowToPgisRow function below (20170630/thisisaaronland)
+
+type PgisResultSet interface {
+	Scan(dest ...interface{}) error
+}
+
 func NewPgisRow(id int64, pid int64, ptid int64, superseded int, deprecated int, meta string, geom string, centroid string) (*PgisRow, error) {
 
 	row := PgisRow{
@@ -53,6 +61,31 @@ func NewPgisRow(id int64, pid int64, ptid int64, superseded int, deprecated int,
 	}
 
 	return &row, nil
+}
+
+type PgisAsyncWorker struct {
+	Client        *PgisClient
+	CountExpected int
+	NumProcesses  int
+	PerPage       int
+	ResultChannel chan *PgisRow
+	DoneChannel   chan bool
+	ErrorChannel  chan error
+}
+
+func NewPgisAsyncWorker(client *PgisClient, expected int, per_page int, num_procs int) (*PgisAsyncWorker, error) {
+
+	w := PgisAsyncWorker{
+		Client:        client,
+		CountExpected: expected,
+		PerPage:       per_page,
+		NumProcesses:  num_procs,
+		ResultChannel: make(chan *PgisRow),
+		DoneChannel:   make(chan bool),
+		ErrorChannel:  make(chan error),
+	}
+
+	return &w, nil
 }
 
 type PgisClient struct {
@@ -124,6 +157,32 @@ func (client *PgisClient) Connection() (*sql.DB, error) {
 	<-client.conns
 
 	return client.db, nil
+}
+
+func (client *PgisClient) QueryRowToPgisRow(row PgisResultSet) (*PgisRow, error) {
+
+	var wofid int64
+	var parentid int64
+	var placetypeid int64
+	var superseded int
+	var deprecated int
+	var meta string
+	var geom string
+	var centroid string
+
+	err := row.Scan(&wofid, &parentid, &placetypeid, &superseded, &deprecated, &meta, &geom, &centroid)
+
+	if err != nil {
+		return nil, err
+	}
+
+	pgrow, err := NewPgisRow(wofid, parentid, placetypeid, superseded, deprecated, meta, geom, centroid)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return pgrow, nil
 }
 
 func (client *PgisClient) GetById(id int64) (*PgisRow, error) {
@@ -501,4 +560,78 @@ func (client *PgisClient) Prune(data_root string, delete bool) error {
 	}
 
 	return nil
+}
+
+func (w *PgisAsyncWorker) Query(sql string, args ...interface{}) {
+
+	defer func() {
+		w.DoneChannel <- true
+	}()
+
+	limit := w.PerPage
+
+	count_fl := float64(w.CountExpected)
+	limit_fl := float64(limit)
+
+	iters_fl := count_fl / limit_fl
+	iters_fl = math.Ceil(iters_fl)
+	iters := int(iters_fl)
+
+	count_throttle := w.NumProcesses
+
+	throttle_ch := make(chan bool, count_throttle)
+	fetch_ch := make(chan bool)
+
+	for t := 0; t < count_throttle; t++ {
+		throttle_ch <- true
+	}
+
+	for offset := 0; offset <= w.CountExpected; offset += limit {
+
+		go func(w *PgisAsyncWorker, sql string, offset int, limit int, args ...interface{}) {
+
+			<-throttle_ch
+
+			defer func() {
+				fetch_ch <- true
+				throttle_ch <- true
+			}()
+
+			db, err := w.Client.dbconn()
+
+			if err != nil {
+				w.ErrorChannel <- err
+				return
+			}
+
+			r, err := db.Query(sql, args...)
+
+			if err != nil {
+				w.ErrorChannel <- err
+				return
+			}
+
+			defer r.Close()
+
+			for r.Next() {
+
+				pg_row, err := w.Client.QueryRowToPgisRow(r)
+
+				if err != nil {
+					w.ErrorChannel <- err
+					return
+				}
+
+				w.ResultChannel <- pg_row
+			}
+
+		}(w, sql, offset, limit, args...)
+	}
+
+	for i := iters; i > 0; {
+		select {
+		case <-fetch_ch:
+			i--
+		}
+	}
 }
