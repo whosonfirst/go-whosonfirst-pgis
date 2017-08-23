@@ -117,7 +117,7 @@ func gjson_coordsToPolygon(r gjson.Result) (geojson.Polygon, error) {
 
 	interior := make([]geom.Polygon, count_interior)
 
-	for i := 1; i < count_interior; i++ {
+	for i := 1; i <= count_interior; i++ {
 
 		poly, err := gjson_linearRingToGeomPolygon(rings[i])
 

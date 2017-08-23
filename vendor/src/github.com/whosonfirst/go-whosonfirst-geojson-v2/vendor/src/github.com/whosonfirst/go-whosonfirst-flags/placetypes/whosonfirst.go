@@ -3,64 +3,64 @@ package placetypes
 import (
 	"github.com/whosonfirst/go-whosonfirst-flags"
 	wof "github.com/whosonfirst/go-whosonfirst-placetypes"
-	"strings"
 )
 
-type PlacetypesFlag struct {
-	flags.PlacetypesFlag
-	required []*wof.WOFPlacetype
-	names    []string
+type PlacetypeFlag struct {
+	flags.PlacetypeFlag
+	pt *wof.WOFPlacetype
 }
 
-func NewPlacetypesFlag(str_placetypes string) (*PlacetypesFlag, error) {
+func NewPlacetypeFlag(name string) (flags.PlacetypeFlag, error) {
 
-	require := make([]*wof.WOFPlacetype, 0)
-	names := make([]string, 0)
+	pt, err := wof.GetPlacetypeByName(name)
 
-	for _, p := range strings.Split(str_placetypes, ",") {
-
-		p = strings.Trim(p, " ")
-
-		pt, err := wof.GetPlacetypeByName(p)
-
-		if err != nil {
-			return nil, err
-		}
-
-		require = append(require, pt)
-		names = append(names, pt.Name)
+	if err != nil {
+		return nil, err
 	}
 
-	f := PlacetypesFlag{
-		required: require,
-		names:    names,
+	f := PlacetypeFlag{
+		pt: pt,
 	}
 
 	return &f, nil
 }
 
-func (f *PlacetypesFlag) Matches(other flags.PlacetypesFlag) bool {
+func (f *PlacetypeFlag) MatchesAny(others ...flags.PlacetypeFlag) bool {
 
-	ours := f.Placetypes()
-	theirs := other.Placetypes()
+	for _, o := range others {
 
-	for _, a := range theirs {
-
-		for _, b := range ours {
-
-			if a == b {
-				return true
-			}
+		if f.Placetype() == o.Placetype() {
+			return true
 		}
+
 	}
 
 	return false
 }
 
-func (f *PlacetypesFlag) Placetypes() []string {
-	return f.names
+func (f *PlacetypeFlag) MatchesAll(others ...flags.PlacetypeFlag) bool {
+
+	matches := 0
+
+	for _, o := range others {
+
+		if f.Placetype() == o.Placetype() {
+			matches += 1
+		}
+
+	}
+
+	if matches == len(others) {
+		return true
+	}
+
+	return false
 }
 
-func (f *PlacetypesFlag) String() string {
-	return strings.Join(f.Placetypes(), ",")
+func (f *PlacetypeFlag) Placetype() string {
+	return f.pt.Name
+}
+
+func (f *PlacetypeFlag) String() string {
+	return f.Placetype()
 }

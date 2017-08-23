@@ -5,7 +5,7 @@ import (
 )
 
 type NullFlag struct {
-	flags.PlacetypesFlag
+	flags.PlacetypeFlag
 }
 
 func NewNullFlag() (*NullFlag, error) {
@@ -14,12 +14,16 @@ func NewNullFlag() (*NullFlag, error) {
 	return &f, nil
 }
 
-func (f *NullFlag) Matches(other flags.PlacetypesFlag) bool {
-     	return true
+func (f *NullFlag) MatchesAny(others ...flags.PlacetypeFlag) bool {
+	return true
 }
 
-func (f *NullFlag) Placetypes() []string {
-	return []string{}
+func (f *NullFlag) MatchesAll(others ...flags.PlacetypeFlag) bool {
+	return true
+}
+
+func (f *NullFlag) Placetype() string {
+	return ""
 }
 
 func (f *NullFlag) String() string {

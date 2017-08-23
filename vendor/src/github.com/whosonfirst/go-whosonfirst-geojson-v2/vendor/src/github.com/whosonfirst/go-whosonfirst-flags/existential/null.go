@@ -30,7 +30,11 @@ func (f *NullFlag) IsKnown() bool {
 	return false
 }
 
-func (f *NullFlag) Matches(other flags.ExistentialFlag) bool {
+func (f *NullFlag) MatchesAny(others ...flags.ExistentialFlag) bool {
+	return true
+}
+
+func (f *NullFlag) MatchesAll(others ...flags.ExistentialFlag) bool {
 	return true
 }
 
