@@ -17,7 +17,6 @@ func main() {
 	geom := flag.String("geometry", "", "Which geometry to index. Valid options are: centroid, bbox or whatever is in the default GeoJSON geometry (default).")
 
 	procs := flag.Int("procs", 200, "The number of concurrent processes to use importing data.")
-	collection := flag.String("collection", "", "The name of your PostgreSQL database for indexing data.")
 
 	pgis_host := flag.String("pgis-host", "localhost", "The host of your PostgreSQL server.")
 	pgis_port := flag.Int("pgis-port", 5432, "The port of your PostgreSQL server.")
