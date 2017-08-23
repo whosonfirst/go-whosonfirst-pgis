@@ -1,26 +1,20 @@
 package pgis
 
 import (
-	"bufio"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	_ "github.com/lib/pq"
-	"github.com/whosonfirst/go-whosonfirst-crawl"
-	"github.com/whosonfirst/go-whosonfirst-csv"
 	"github.com/whosonfirst/go-whosonfirst-geojson-v2"
-	"github.com/whosonfirst/go-whosonfirst-geojson-v2/feature"
 	geom "github.com/whosonfirst/go-whosonfirst-geojson-v2/properties/geometry"
 	wof "github.com/whosonfirst/go-whosonfirst-geojson-v2/properties/whosonfirst"
 	"github.com/whosonfirst/go-whosonfirst-geojson-v2/utils"
 	"github.com/whosonfirst/go-whosonfirst-placetypes"
 	"github.com/whosonfirst/go-whosonfirst-uri"
-	"io"
 	"log"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strconv"
 	"sync"
@@ -161,37 +155,6 @@ func (client *PgisClient) GetById(id int64) (*PgisRow, error) {
 	}
 
 	return pgrow, nil
-}
-
-func (client *PgisClient) IndexFile(abs_path string, collection string) error {
-
-	is_wof, err := uri.IsWOFFile(abs_path)
-
-	if err != nil {
-		return err
-	}
-
-	if !is_wof {
-		return errors.New("Not a valid WOF file")
-	}
-
-	is_alt, err := uri.IsAltFile(abs_path)
-
-	if err != nil {
-		return err
-	}
-
-	if is_alt {
-		return nil
-	}
-
-	feature, err := feature.LoadWOFFeatureFromFile(abs_path)
-
-	if err != nil {
-		return err
-	}
-
-	return client.IndexFeature(feature, collection)
 }
 
 func (client *PgisClient) IndexFeature(feature geojson.Feature, collection string) error {
@@ -376,154 +339,6 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 
 	return nil
 
-}
-
-func (client *PgisClient) IndexMetaFile(csv_path string, collection string, data_root string) error {
-
-	reader, err := csv.NewDictReaderFromPath(csv_path)
-
-	if err != nil {
-		return err
-	}
-
-	count := runtime.GOMAXPROCS(0) // perversely this is how we get the count...
-	ch := make(chan bool, count)
-
-	go func() {
-		for i := 0; i < count; i++ {
-			ch <- true
-		}
-	}()
-
-	wg := new(sync.WaitGroup)
-
-	for {
-		row, err := reader.Read()
-
-		if err == io.EOF {
-			break
-		}
-
-		if err != nil {
-			return err
-		}
-
-		rel_path, ok := row["path"]
-
-		if !ok {
-			msg := fmt.Sprintf("missing 'path' column in meta file")
-			return errors.New(msg)
-		}
-
-		abs_path := filepath.Join(data_root, rel_path)
-
-		<-ch
-
-		wg.Add(1)
-
-		go func(ch chan bool) {
-
-			defer func() {
-				wg.Done()
-				ch <- true
-			}()
-
-			client.IndexFile(abs_path, collection)
-
-		}(ch)
-	}
-
-	wg.Wait()
-
-	return nil
-}
-
-func (client *PgisClient) IndexDirectory(abs_path string, collection string) error {
-
-	re_wof, _ := regexp.Compile(`(\d+)\.geojson$`)
-
-	count := 0
-	ok := 0
-	errs := 0
-
-	cb := func(abs_path string, info os.FileInfo) error {
-
-		// please make me more like this...
-		// https://github.com/whosonfirst/py-mapzen-whosonfirst-utils/blob/master/mapzen/whosonfirst/utils/__init__.py#L265
-
-		fname := filepath.Base(abs_path)
-
-		if !re_wof.MatchString(fname) {
-			// log.Println("skip", abs_path)
-			return nil
-		}
-
-		count += 1
-
-		err := client.IndexFile(abs_path, collection)
-
-		if err != nil {
-			errs += 1
-			msg := fmt.Sprintf("failed to index %s, because %v", abs_path, err)
-			log.Println(msg)
-			return errors.New(msg)
-		}
-
-		ok += 1
-		return nil
-	}
-
-	c := crawl.NewCrawler(abs_path)
-	c.Crawl(cb)
-
-	log.Printf("count %d ok %d error %d\n", count, ok, errs)
-	return nil
-}
-
-func (client *PgisClient) IndexFileList(abs_path string, collection string) error {
-
-	file, err := os.Open(abs_path)
-
-	if err != nil {
-		return err
-	}
-
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-
-	count := runtime.GOMAXPROCS(0) // perversely this is how we get the count...
-	ch := make(chan bool, count)
-
-	go func() {
-		for i := 0; i < count; i++ {
-			ch <- true
-		}
-	}()
-
-	wg := new(sync.WaitGroup)
-
-	for scanner.Scan() {
-
-		<-ch
-
-		path := scanner.Text()
-
-		wg.Add(1)
-
-		go func(path string, collection string, wg *sync.WaitGroup, ch chan bool) {
-
-			defer wg.Done()
-
-			client.IndexFile(path, collection)
-			ch <- true
-
-		}(path, collection, wg, ch)
-	}
-
-	wg.Wait()
-
-	return nil
 }
 
 func (client *PgisClient) Prune(data_root string, delete bool) error {
