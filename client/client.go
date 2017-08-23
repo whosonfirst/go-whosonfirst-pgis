@@ -59,7 +59,7 @@ type PgisClient struct {
 	Geometry string
 	Debug    bool
 	Verbose  bool
-	Logger	 *log.WOFLogger
+	Logger   *log.WOFLogger
 	dsn      string
 	db       *sql.DB
 	conns    chan bool
@@ -103,7 +103,7 @@ func NewPgisClient(host string, port int, user string, password string, dbname s
 	client := PgisClient{
 		Geometry: "", // use the default geojson geometry
 		Debug:    false,
-		Logger:	  logger,
+		Logger:   logger,
 		dsn:      dsn,
 		db:       db,
 		conns:    conns,
@@ -172,13 +172,63 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 
 	str_wofid := strconv.FormatInt(wofid, 10)
 
-	// need to account for this...
-	// 22:18:29.384353 [wof-pgis-index][pgis-client] ERROR failed to execute query because pq: Geometry type (Polygon) does not match column type (MultiPolygon)
+	geom_type := geom.Type(feature)
 
 	str_geom, err := geom.ToString(feature)
 
 	if err != nil {
 		return err
+	}
+
+	// because this... thanks PostGIS (20170823/thisisaaronland)
+	// 22:18:29.384353 [wof-pgis-index][pgis-client] ERROR failed to execute query because
+	// pq: Geometry type (Polygon) does not match column type (MultiPolygon)
+
+	if geom_type == "Polygon" {
+
+		type Geom struct {
+			Type        string      `json:"type"`
+			Coordinates interface{} `json:"coordinates"`
+		}
+
+		var poly Geom
+
+		err = json.Unmarshal([]byte(str_geom), &poly)
+
+		if err != nil {
+			return err
+		}
+
+		b_coords, err := json.Marshal(poly.Coordinates)
+
+		if err != nil {
+			return nil
+		}
+
+		str_coords := fmt.Sprintf("[ %s ]", b_coords)
+
+		var coords interface{}
+
+		err = json.Unmarshal([]byte(str_coords), &coords)
+
+		if err != nil {
+			return err
+		}
+
+		multi := Geom{
+			Type:        "MultiPolygon",
+			Coordinates: coords,
+		}
+
+		b_geom, err := json.Marshal(multi)
+
+		if err != nil {
+			return err
+		}
+
+		str_geom = string(b_geom)
+
+		client.Logger.Debug("ENDED WITH %s", str_geom)
 	}
 
 	centroid, err := wof.Centroid(feature)
@@ -195,8 +245,7 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 		return err
 	}
 
-	if geom.Type(feature) == "Point" {
-
+	if geom_type == "Point" {
 		str_centroid = str_geom
 		str_geom = ""
 	}
