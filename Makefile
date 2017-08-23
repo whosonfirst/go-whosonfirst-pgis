@@ -9,7 +9,7 @@ prep:
 self:   prep
 	if test -d src/github.com/whosonfirst/go-whosonfirst-pgis; then rm -rf src/github.com/whosonfirst/go-whosonfirst-pgis; fi
 	mkdir -p src/github.com/whosonfirst/go-whosonfirst-pgis
-	cp -r index src/github.com/whosonfirst/go-whosonfirst-pgis/index
+	cp -r client src/github.com/whosonfirst/go-whosonfirst-pgis/client
 	cp -r vendor/src/* src/
 	cp -r vendor/src/github.com/whosonfirst/go-whosonfirst-geojson-v2/vendor/src/github.com/tidwall src/github.com/
 	cp -r vendor/src/github.com/whosonfirst/go-whosonfirst-geojson-v2/vendor/src/github.com/whosonfirst/go-whosonfirst-hash src/github.com/whosonfirst/
@@ -35,7 +35,7 @@ vendor-deps: rmdeps deps
 
 fmt:
 	go fmt cmd/*.go
-	go fmt index/*.go
+	go fmt client/*.go
 
 bin:	self
 	@GOPATH=$(GOPATH) go build -o bin/wof-pgis-connect cmd/wof-pgis-connect.go

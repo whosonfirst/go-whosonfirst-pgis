@@ -1,12 +1,12 @@
 package main
 
 import (
-       "context"
+	"context"
 	"flag"
 	"github.com/whosonfirst/go-whosonfirst-geojson-v2/feature"
-	wof "github.com/whosonfirst/go-whosonfirst-index"
+	"github.com/whosonfirst/go-whosonfirst-index"
 	"github.com/whosonfirst/go-whosonfirst-log"
-	"github.com/whosonfirst/go-whosonfirst-pgis/index"
+	"github.com/whosonfirst/go-whosonfirst-pgis/client"
 	"io"
 	"os"
 	"runtime"
@@ -63,7 +63,7 @@ func main() {
 		return client.IndexFeature(feature, *pgis_table)
 	}
 
-	indexer, err := wof.NewIndexer(*mode, cb)
+	indexer, err := index.NewIndexer(*mode, cb)
 
 	if err != nil {
 		logger.Fatal("Failed to create new indexer because %s", err)

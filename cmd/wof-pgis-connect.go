@@ -2,7 +2,7 @@ package main
 
 import (
 	"flag"
-	"github.com/whosonfirst/go-whosonfirst-pgis/index"
+	"github.com/whosonfirst/go-whosonfirst-pgis/client"
 	"log"
 	"os"
 )

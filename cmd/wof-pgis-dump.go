@@ -5,7 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/tidwall/pretty"
-	"github.com/whosonfirst/go-whosonfirst-pgis/index"
+	"github.com/whosonfirst/go-whosonfirst-pgis/client"
 	"log"
 	"os"
 	"strconv"
