@@ -5,6 +5,7 @@ import (
 	"flag"
 	"github.com/whosonfirst/go-whosonfirst-geojson-v2/feature"
 	"github.com/whosonfirst/go-whosonfirst-index"
+	"github.com/whosonfirst/go-whosonfirst-index/utils"
 	"github.com/whosonfirst/go-whosonfirst-log"
 	"github.com/whosonfirst/go-whosonfirst-pgis/client"
 	"io"
@@ -52,7 +53,15 @@ func main() {
 
 	cb := func(fh io.Reader, ctx context.Context, args ...interface{}) error {
 
-		// PLEASE UPDATE TO FILTER OUT ALT FILES ETC...
+		ok, err := utils.IsPrincipalWOFRecord(fh, ctx)
+
+		if err != nil {
+			return err
+		}
+
+		if !ok {
+			return nil
+		}
 
 		feature, err := feature.LoadWOFFeatureFromReader(fh)
 

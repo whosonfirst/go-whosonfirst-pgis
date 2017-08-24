@@ -88,7 +88,7 @@ func (tm *Timer) poll() {
 
 		select {
 		case t := <-tm.Timings:
-			tm.Callback(t)
+			go tm.Callback(t)
 		case <-tm.Done:
 			return
 		default:

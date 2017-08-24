@@ -9,7 +9,9 @@ prep:
 self:   prep
 	if test -d src/github.com/whosonfirst/go-whosonfirst-index; then rm -rf src/github.com/whosonfirst/go-whosonfirst-index; fi
 	mkdir -p src/github.com/whosonfirst/go-whosonfirst-index
+	mkdir -p src/github.com/whosonfirst/go-whosonfirst-index/utils
 	cp -r *.go src/github.com/whosonfirst/go-whosonfirst-index/
+	cp -r utils/*.go src/github.com/whosonfirst/go-whosonfirst-index/utils/
 	if test -d vendor/src; then cp -r vendor/src/* src/; fi
 
 rmdeps:
@@ -20,6 +22,7 @@ deps:
 	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-csv"
 	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-log"
 	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-timer"
+	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-uri"
 
 vendor-deps: rmdeps deps
 	if test ! -d vendor; then mkdir vendor; fi
@@ -30,6 +33,7 @@ vendor-deps: rmdeps deps
 
 fmt:
 	go fmt cmd/*.go
+	go fmt utils/*.go
 	go fmt *.go
 
 bin:	self
