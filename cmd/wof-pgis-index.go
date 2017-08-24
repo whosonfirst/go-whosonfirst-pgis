@@ -8,6 +8,7 @@ import (
 	"github.com/whosonfirst/go-whosonfirst-index/utils"
 	"github.com/whosonfirst/go-whosonfirst-log"
 	"github.com/whosonfirst/go-whosonfirst-pgis/client"
+	"github.com/whosonfirst/go-whosonfirst-timer"
 	"io"
 	"os"
 	"runtime"
@@ -60,6 +61,9 @@ func main() {
 		}
 
 		if !ok {
+			// we know we've just invoked this above so...
+			// path, _ := index.PathForContext(ctx)
+			// logger.Debug("SKIP %s", path)
 			return nil
 		}
 
@@ -78,7 +82,13 @@ func main() {
 		logger.Fatal("Failed to create new indexer because %s", err)
 	}
 
-	indexer.Logger = logger
+	tm, err := timer.NewDefaultTimer()
+
+	if err != nil {
+		logger.Fatal("Failed to create timer because %s", err)
+	}
+
+	defer tm.Stop()
 
 	err = indexer.IndexPaths(flag.Args())
 

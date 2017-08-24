@@ -267,6 +267,17 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 		return err
 	}
 
+	// we do this now because we might redefine str_geom below (to
+	// be "") if we are dealing with a Point geometry which will
+	// cause the JSON wrangling in HashGeometry to fail
+	// (20170823/thisisaaronland)
+
+	geom_hash, err := utils.HashGeometry([]byte(str_geom))
+
+	if err != nil {
+		return err
+	}
+
 	// because this... thanks PostGIS (20170823/thisisaaronland)
 	// 22:18:29.384353 [wof-pgis-index][pgis-client] ERROR failed to execute query because
 	// pq: Geometry type (Polygon) does not match column type (MultiPolygon)
@@ -324,7 +335,7 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 		return err
 	}
 
-	client.Logger.Status("Centroid for %d derived from %s", wofid, centroid.Source())
+	// client.Logger.Status("Centroid for %d derived from %s", wofid, centroid.Source())
 
 	str_centroid, err := centroid.ToString()
 
@@ -387,18 +398,11 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 	meta_json, err := json.Marshal(meta)
 
 	if err != nil {
-		client.Logger.Warning("FAILED to marshal JSON on %s because, %v\n", meta_key, err)
+		client.Logger.Warning("FAILED to marshal JSON on %s because, %v", meta_key, err)
 		return err
 	}
 
 	str_meta := string(meta_json)
-
-	geom_hash, err := utils.HashGeometry([]byte(str_geom))
-
-	if err != nil {
-		client.Logger.Warning("FAILED to hash geom, because %s\n", err)
-		return err
-	}
 
 	now := time.Now()
 	lastmod := now.Format(time.RFC3339)
@@ -419,7 +423,7 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 			st_geojson = "ST_GeomFromGeoJSON('...')"
 		}
 
-		client.Logger.Status("INSERT INTO whosonfirst (id, parent_id, placetype_id, is_superseded, is_deprecated, meta, geom_hash, lastmod, geom, centroid) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)", wofid, parent, pt.Id, str_superseded, str_deprecated, str_meta, geom_hash, lastmod, st_geojson, st_centroid)
+		client.Logger.Debug("INSERT INTO whosonfirst (id, parent_id, placetype_id, is_superseded, is_deprecated, meta, geom_hash, lastmod, geom, centroid) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)", wofid, parent, pt.Id, str_superseded, str_deprecated, str_meta, geom_hash, lastmod, st_geojson, st_centroid)
 
 		st_geojson = actual_st_geojson
 	}
@@ -551,7 +555,6 @@ func (client *PgisClient) Prune(data_root string, delete bool) error {
 		case err := <-w.ErrorChannel:
 			return err
 		case <-w.DoneChannel:
-			client.Logger.Status("DONE")
 			f--
 		}
 	}
