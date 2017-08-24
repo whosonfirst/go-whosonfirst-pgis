@@ -690,15 +690,6 @@ func (w *PgisAsyncWorker) Query(sql string, args ...interface{}) {
 
 	}()
 
-	tm, err := timer.NewDefaultTimer()
-
-	if err != nil {
-		w.ErrorChannel <- err
-		return
-	}
-
-	defer tm.Stop()
-
 	for i := iters; i > 0; {
 		select {
 		case err := <-error_ch:
