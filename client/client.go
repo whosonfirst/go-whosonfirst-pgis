@@ -12,13 +12,14 @@ import (
 	"github.com/whosonfirst/go-whosonfirst-geojson-v2/utils"
 	"github.com/whosonfirst/go-whosonfirst-log"
 	"github.com/whosonfirst/go-whosonfirst-placetypes"
+	"github.com/whosonfirst/go-whosonfirst-timer"
 	"github.com/whosonfirst/go-whosonfirst-uri"
+	golog "log"
 	"math"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
-	"sync"
 	"time"
 )
 
@@ -47,6 +48,57 @@ type PgisResultSet interface {
 	Scan(dest ...interface{}) error
 }
 
+type PgisQueryRowFunc func(row PgisResultSet) (*PgisRow, error)
+
+func QueryRowToPgisRow(row PgisResultSet) (*PgisRow, error) {
+
+	var wofid int64
+	var parentid int64
+	var placetypeid int64
+	var superseded int
+	var deprecated int
+	var meta string
+	var geom string
+	var centroid string
+
+	golog.Println("SCAN...")
+	err := row.Scan(&wofid, &parentid, &placetypeid, &superseded, &deprecated, &meta, &geom, &centroid)
+	golog.Println("SCAN DONE...")
+	if err != nil {
+		return nil, err
+	}
+
+	pgrow, err := NewPgisRow(wofid, parentid, placetypeid, superseded, deprecated, meta, geom, centroid)
+
+	if err != nil {
+		golog.Println("ACK", err)
+		return nil, err
+	}
+
+	golog.Println("RETURN...")
+	return pgrow, nil
+}
+
+func QueryRowToPgisRowForPruning(row PgisResultSet) (*PgisRow, error) {
+
+	var wofid int64
+	var meta string
+
+	err := row.Scan(&wofid, &meta)
+
+	if err != nil {
+		return nil, err
+	}
+
+	pgrow, err := NewPgisRow(wofid, -1, -1, -1, -1, meta, "", "")
+
+	if err != nil {
+		return nil, err
+	}
+
+	return pgrow, nil
+}
+
 func NewPgisRow(id int64, pid int64, ptid int64, superseded int, deprecated int, meta string, geom string, centroid string) (*PgisRow, error) {
 
 	row := PgisRow{
@@ -65,6 +117,7 @@ func NewPgisRow(id int64, pid int64, ptid int64, superseded int, deprecated int,
 
 type PgisAsyncWorker struct {
 	Client        *PgisClient
+	QueryFunc     PgisQueryRowFunc
 	CountExpected int
 	NumProcesses  int
 	PerPage       int
@@ -77,6 +130,7 @@ func NewPgisAsyncWorker(client *PgisClient, expected int, per_page int, num_proc
 
 	w := PgisAsyncWorker{
 		Client:        client,
+		QueryFunc:     QueryRowToPgisRow,
 		CountExpected: expected,
 		PerPage:       per_page,
 		NumProcesses:  num_procs,
@@ -157,32 +211,6 @@ func (client *PgisClient) Connection() (*sql.DB, error) {
 	<-client.conns
 
 	return client.db, nil
-}
-
-func (client *PgisClient) QueryRowToPgisRow(row PgisResultSet) (*PgisRow, error) {
-
-	var wofid int64
-	var parentid int64
-	var placetypeid int64
-	var superseded int
-	var deprecated int
-	var meta string
-	var geom string
-	var centroid string
-
-	err := row.Scan(&wofid, &parentid, &placetypeid, &superseded, &deprecated, &meta, &geom, &centroid)
-
-	if err != nil {
-		return nil, err
-	}
-
-	pgrow, err := NewPgisRow(wofid, parentid, placetypeid, superseded, deprecated, meta, geom, centroid)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return pgrow, nil
 }
 
 func (client *PgisClient) GetById(id int64) (*PgisRow, error) {
@@ -464,99 +492,123 @@ func (client *PgisClient) Prune(data_root string, delete bool) error {
 		return err
 	}
 
-	limit := 100000
+	client.Logger.Status("PRUNE %d records", count_rows)
 
-	for offset := 0; offset < count_rows; offset += limit {
+	limit := 10000
+	procs := runtime.NumCPU() * 2
 
-		sql := fmt.Sprintf("SELECT id, meta FROM whosonfirst OFFSET %d LIMIT %d", offset, limit)
-		client.Logger.Debug("%s (%d)\n", sql, count_rows)
+	w, err := NewPgisAsyncWorker(client, count_rows, limit, procs)
 
-		rows, err := db.Query(sql)
+	if err != nil {
+		return err
+	}
+
+	w.QueryFunc = QueryRowToPgisRowForPruning
+
+	go w.Query("SELECT id, meta FROM whosonfirst")
+
+	tm, err := timer.NewDefaultTimer()
+
+	if err != nil {
+		w.ErrorChannel <- err
+		return err
+	}
+
+	defer tm.Stop()
+
+	fetching := 1
+	count := 0
+
+	count_throttle := 100
+
+	throttle_ch := make(chan bool, count_throttle)
+
+	for t := 0; t < count_throttle; t++ {
+		throttle_ch <- true
+	}
+
+	for f := fetching; f > 0; {
+		select {
+		case row := <-w.ResultChannel:
+
+			<-throttle_ch
+
+			go func() {
+
+				defer func() {
+					throttle_ch <- true
+				}()
+
+				err := client.PruneRow(row, data_root, delete)
+
+				if err != nil {
+					w.ErrorChannel <- err
+				}
+
+				count += 1
+			}()
+
+		case err := <-w.ErrorChannel:
+			return err
+		case <-w.DoneChannel:
+			client.Logger.Status("DONE")
+			f--
+		}
+	}
+
+	client.Logger.Status("Pruned %d", count)
+	return nil
+}
+
+func (client *PgisClient) PruneRow(row *PgisRow, data_root string, delete bool) error {
+
+	return nil
+	var meta Meta
+
+	err := json.Unmarshal([]byte(row.Meta), &meta)
+
+	if err != nil {
+		return err
+	}
+
+	repo := filepath.Join(data_root, meta.Repo)
+	data := filepath.Join(repo, "data")
+
+	wofid := row.Id
+
+	wof_path, err := uri.Id2AbsPath(data, wofid)
+
+	if err != nil {
+		return err
+	}
+
+	_, err = os.Stat(wof_path)
+
+	if !os.IsNotExist(err) {
+		return nil
+	}
+
+	client.Logger.Status("%s does not exist on disk", wof_path)
+
+	if delete {
+
+		db, err := client.dbconn()
 
 		if err != nil {
 			return err
 		}
 
-		count := runtime.GOMAXPROCS(0)
-		throttle := make(chan bool, count)
+		defer func() {
+			client.conns <- true
+		}()
 
-		for i := 0; i < count; i++ {
-			throttle <- true
+		sql := "DELETE FROM whosonfirst WHERE id=$1"
+		_, err = db.Exec(sql, wofid)
+
+		if err != nil {
+			client.Logger.Warning("Failed to delete %d because %s (%s)", wofid, err, sql)
+			return err
 		}
-
-		wg := new(sync.WaitGroup)
-
-		for rows.Next() {
-
-			var wofid int64
-			var str_meta string
-
-			err := rows.Scan(&wofid, &str_meta)
-
-			if err != nil {
-				return err
-			}
-
-			<-throttle
-
-			wg.Add(1)
-
-			go func(data_root string, wofid int64, str_meta string, throttle chan bool) {
-
-				defer func() {
-					wg.Done()
-					throttle <- true
-				}()
-
-				var meta Meta
-
-				err := json.Unmarshal([]byte(str_meta), &meta)
-
-				if err != nil {
-					return
-				}
-
-				repo := filepath.Join(data_root, meta.Repo)
-				data := filepath.Join(repo, "data")
-
-				wof_path, err := uri.Id2AbsPath(data, wofid)
-
-				if err != nil {
-					return
-				}
-
-				_, err = os.Stat(wof_path)
-
-				if !os.IsNotExist(err) {
-					return
-				}
-
-				client.Logger.Info("%s does not exist\n", wof_path)
-
-				if delete {
-
-					db, err := client.dbconn()
-
-					if err != nil {
-						return
-					}
-
-					defer func() {
-						client.conns <- true
-					}()
-
-					sql := "DELETE FROM whosonfirst WHERE id=$1"
-					_, err = db.Exec(sql, wofid)
-
-					if err != nil {
-						client.Logger.Warning("Failed to delete %d because %s (%s)", wofid, err, sql)
-					}
-				}
-
-			}(data_root, wofid, str_meta, throttle)
-		}
-
-		wg.Wait()
 	}
 
 	return nil
@@ -566,6 +618,17 @@ func (w *PgisAsyncWorker) Query(sql string, args ...interface{}) {
 
 	defer func() {
 		w.DoneChannel <- true
+	}()
+
+	db, err := w.Client.dbconn()
+
+	if err != nil {
+		w.ErrorChannel <- err
+		return
+	}
+
+	defer func() {
+		w.Client.conns <- true
 	}()
 
 	limit := w.PerPage
@@ -578,58 +641,69 @@ func (w *PgisAsyncWorker) Query(sql string, args ...interface{}) {
 	iters := int(iters_fl)
 
 	count_throttle := w.NumProcesses
-
 	throttle_ch := make(chan bool, count_throttle)
-	fetch_ch := make(chan bool)
 
 	for t := 0; t < count_throttle; t++ {
 		throttle_ch <- true
 	}
 
-	for offset := 0; offset <= w.CountExpected; offset += limit {
+	fetch_ch := make(chan bool, 1)
+	error_ch := make(chan error, 1)
 
-		go func(w *PgisAsyncWorker, sql string, offset int, limit int, args ...interface{}) {
+	go func() {
+
+		for offset := 0; offset <= w.CountExpected; offset += limit {
 
 			<-throttle_ch
 
-			defer func() {
-				fetch_ch <- true
-				throttle_ch <- true
-			}()
+			go func(w *PgisAsyncWorker, sql string, offset int, limit int, args ...interface{}) {
 
-			db, err := w.Client.dbconn()
+				defer func() {
+					fetch_ch <- true
+					throttle_ch <- true
+				}()
 
-			if err != nil {
-				w.ErrorChannel <- err
-				return
-			}
-
-			r, err := db.Query(sql, args...)
-
-			if err != nil {
-				w.ErrorChannel <- err
-				return
-			}
-
-			defer r.Close()
-
-			for r.Next() {
-
-				pg_row, err := w.Client.QueryRowToPgisRow(r)
+				sql = fmt.Sprintf("%s OFFSET %d LIMIT %d", sql, offset, limit)
+				r, err := db.Query(sql, args...)
 
 				if err != nil {
-					w.ErrorChannel <- err
+					error_ch <- err
 					return
 				}
 
-				w.ResultChannel <- pg_row
-			}
+				defer r.Close()
 
-		}(w, sql, offset, limit, args...)
+				for r.Next() {
+
+					pg_row, err := w.QueryFunc(r)
+
+					if err != nil {
+						error_ch <- err
+						return
+					}
+
+					w.ResultChannel <- pg_row
+				}
+
+			}(w, sql, offset, limit, args...)
+		}
+
+	}()
+
+	tm, err := timer.NewDefaultTimer()
+
+	if err != nil {
+		w.ErrorChannel <- err
+		return
 	}
+
+	defer tm.Stop()
 
 	for i := iters; i > 0; {
 		select {
+		case err := <-error_ch:
+			w.ErrorChannel <- err
+			return
 		case <-fetch_ch:
 			i--
 		}

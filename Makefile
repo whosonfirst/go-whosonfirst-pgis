@@ -23,6 +23,7 @@ deps:
 	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-index"
 	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-log"
 	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-placetypes"
+	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-timer"
 	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-uri"
 	@GOPATH=$(GOPATH) go get -u "github.com/lib/pq"
 
