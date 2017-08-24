@@ -378,8 +378,8 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 		return err
 	}
 
-	str_deprecated := fmt.Sprintf("%d", is_deprecated.Flag())
-	str_superseded := fmt.Sprintf("%d", is_superseded.Flag())
+	str_deprecated := is_deprecated.StringFlag()
+	str_superseded := is_superseded.StringFlag()
 
 	meta_key := str_wofid + "#meta"
 
