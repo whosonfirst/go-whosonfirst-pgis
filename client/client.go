@@ -278,57 +278,6 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 		return err
 	}
 
-	// because this... thanks PostGIS (20170823/thisisaaronland)
-	// 22:18:29.384353 [wof-pgis-index][pgis-client] ERROR failed to execute query because
-	// pq: Geometry type (Polygon) does not match column type (MultiPolygon)
-
-	if geom_type == "Polygon" {
-
-		type Geom struct {
-			Type        string      `json:"type"`
-			Coordinates interface{} `json:"coordinates"`
-		}
-
-		var poly Geom
-
-		err = json.Unmarshal([]byte(str_geom), &poly)
-
-		if err != nil {
-			return err
-		}
-
-		b_coords, err := json.Marshal(poly.Coordinates)
-
-		if err != nil {
-			return nil
-		}
-
-		str_coords := fmt.Sprintf("[ %s ]", b_coords)
-
-		var coords interface{}
-
-		err = json.Unmarshal([]byte(str_coords), &coords)
-
-		if err != nil {
-			return err
-		}
-
-		multi := Geom{
-			Type:        "MultiPolygon",
-			Coordinates: coords,
-		}
-
-		b_geom, err := json.Marshal(multi)
-
-		if err != nil {
-			return err
-		}
-
-		str_geom = string(b_geom)
-
-		client.Logger.Debug("ENDED WITH %s", str_geom)
-	}
-
 	centroid, err := wof.Centroid(feature)
 
 	if err != nil {
@@ -407,9 +356,10 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 	now := time.Now()
 	lastmod := now.Format(time.RFC3339)
 
+	// http://www.postgis.org/docs/ST_Multi.html
 	// http://postgis.net/docs/ST_GeomFromGeoJSON.html
 
-	st_geojson := fmt.Sprintf("ST_GeomFromGeoJSON('%s')", str_geom)
+	st_geojson := fmt.Sprintf("ST_Multi(ST_GeomFromGeoJSON('%s'))", str_geom)
 	st_centroid := fmt.Sprintf("ST_GeomFromGeoJSON('%s')", str_centroid)
 
 	if client.Verbose {
@@ -420,7 +370,7 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 		actual_st_geojson := st_geojson
 
 		if client.Geometry == "" {
-			st_geojson = "ST_GeomFromGeoJSON('...')"
+			st_geojson = "ST_Multi(ST_GeomFromGeoJSON('...'))"
 		}
 
 		client.Logger.Status("INSERT INTO whosonfirst (id, parent_id, placetype_id, is_superseded, is_deprecated, meta, geom_hash, lastmod, geom, centroid) VALUES (%d, %d, %d, %s, %s, %s, %s, %s, %s, %s)", wofid, parent, pt.Id, str_superseded, str_deprecated, str_meta, geom_hash, lastmod, st_geojson, st_centroid)
