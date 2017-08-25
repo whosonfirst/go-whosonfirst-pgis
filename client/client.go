@@ -14,7 +14,6 @@ import (
 	"github.com/whosonfirst/go-whosonfirst-placetypes"
 	"github.com/whosonfirst/go-whosonfirst-timer"
 	"github.com/whosonfirst/go-whosonfirst-uri"
-	golog "log"
 	"math"
 	"os"
 	"path/filepath"
@@ -61,9 +60,8 @@ func QueryRowToPgisRow(row PgisResultSet) (*PgisRow, error) {
 	var geom string
 	var centroid string
 
-	golog.Println("SCAN...")
 	err := row.Scan(&wofid, &parentid, &placetypeid, &superseded, &deprecated, &meta, &geom, &centroid)
-	golog.Println("SCAN DONE...")
+
 	if err != nil {
 		return nil, err
 	}
@@ -71,11 +69,9 @@ func QueryRowToPgisRow(row PgisResultSet) (*PgisRow, error) {
 	pgrow, err := NewPgisRow(wofid, parentid, placetypeid, superseded, deprecated, meta, geom, centroid)
 
 	if err != nil {
-		golog.Println("ACK", err)
 		return nil, err
 	}
 
-	golog.Println("RETURN...")
 	return pgrow, nil
 }
 
