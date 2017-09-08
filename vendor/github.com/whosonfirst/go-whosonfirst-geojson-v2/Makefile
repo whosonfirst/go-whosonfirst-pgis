@@ -19,7 +19,7 @@ self:   prep rmdeps
 	cp -r geometry/*.go src/github.com/whosonfirst/go-whosonfirst-geojson-v2/geometry/
 	cp -r properties/* src/github.com/whosonfirst/go-whosonfirst-geojson-v2/properties/
 	cp -r utils/*.go src/github.com/whosonfirst/go-whosonfirst-geojson-v2/utils/
-	cp -r vendor/src/* src/
+	cp -r vendor/* src/
 
 rmdeps:
 	if test -d src; then rm -rf src; fi 
@@ -35,9 +35,8 @@ deps:   rmdeps
 	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-uri"
 
 vendor-deps: deps
-	if test ! -d vendor; then mkdir vendor; fi
-	if test -d vendor/src; then rm -rf vendor/src; fi
-	cp -r src vendor/src
+	if test -d vendor; then rm -rf vendor; fi
+	cp -r src vendor
 	find vendor -name '.git' -print -type d -exec rm -rf {} +
 	rm -rf src
 
@@ -56,3 +55,4 @@ bin:	self
 	@GOPATH=$(GOPATH) go build -o bin/wof-geojson-existential cmd/wof-geojson-existential.go
 	@GOPATH=$(GOPATH) go build -o bin/wof-geojson-hash cmd/wof-geojson-hash.go
 	@GOPATH=$(GOPATH) go build -o bin/wof-geojson-intersects cmd/wof-geojson-intersects.go
+	@GOPATH=$(GOPATH) go build -o bin/wof-geojson-names cmd/wof-geojson-names.go

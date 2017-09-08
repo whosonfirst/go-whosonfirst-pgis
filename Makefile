@@ -11,8 +11,6 @@ self:   prep
 	mkdir -p src/github.com/whosonfirst/go-whosonfirst-pgis
 	cp -r client src/github.com/whosonfirst/go-whosonfirst-pgis/client
 	cp -r vendor/* src/
-	cp -r vendor/github.com/whosonfirst/go-whosonfirst-geojson-v2/vendor/src/github.com/tidwall src/github.com/
-	cp -r vendor/github.com/whosonfirst/go-whosonfirst-geojson-v2/vendor/src/github.com/whosonfirst/go-whosonfirst-hash src/github.com/whosonfirst/
 
 rmdeps:
 	if test -d src; then rm -rf src; fi 
