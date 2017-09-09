@@ -223,8 +223,8 @@ func (client *PgisClient) GetById(id int64) (*PgisRow, error) {
 	var superseded int
 	var deprecated int
 	var meta string
-	var geom string
-	var centroid string
+	var centroid sql.NullString // this column should never be NULL but
+	var geom sql.NullString     // this column might be so... https://golang.org/pkg/database/sql/#NullString
 
 	sql := fmt.Sprintf("SELECT id, parent_id, placetype_id, is_superseded, is_deprecated, meta, ST_AsGeoJSON(geom), ST_AsGeoJSON(centroid) FROM whosonfirst WHERE id=$1")
 
@@ -235,7 +235,7 @@ func (client *PgisClient) GetById(id int64) (*PgisRow, error) {
 		return nil, err
 	}
 
-	pgrow, err := NewPgisRow(wofid, parentid, placetypeid, superseded, deprecated, meta, geom, centroid)
+	pgrow, err := NewPgisRow(wofid, parentid, placetypeid, superseded, deprecated, meta, geom.String, centroid.String)
 
 	if err != nil {
 		return nil, err
