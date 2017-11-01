@@ -40,3 +40,8 @@ bin:	self
 	@GOPATH=$(GOPATH) go build -o bin/wof-pgis-dump cmd/wof-pgis-dump.go
 	@GOPATH=$(GOPATH) go build -o bin/wof-pgis-index cmd/wof-pgis-index.go
 	@GOPATH=$(GOPATH) go build -o bin/wof-pgis-prune cmd/wof-pgis-prune.go
+
+dwindex:	self
+	@GOPATH=$(GOPATH) go get -u "github.com/tidwall/gjson"
+	@GOPATH=$(GOPATH) go build -o bin/wof-pgis-index cmd/wof-pgis-index.go
+	ls -la ./bin/wof-pgis-index
