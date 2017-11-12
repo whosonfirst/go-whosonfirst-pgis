@@ -355,6 +355,8 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 	now := time.Now()
 	lastmod := now.Format(time.RFC3339)
 
+	str_wd_id := gjson.GetBytes(feature.Bytes(), "properties.wof:concordances.wd:id").String()
+
 	str_properties := gjson.GetBytes(feature.Bytes(), "properties").String()
 
 	// http://www.postgis.org/docs/ST_Multi.html
@@ -376,11 +378,11 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 
 		client.Logger.Status(
 			`INSERT INTO %s
-			(id, parent_id, placetype_id, is_superseded, is_deprecated,
+			(id, parent_id, placetype_id, wd_id, is_superseded, is_deprecated,
 			meta, properties, geom_hash, lastmod, geom, centroid)
-			VALUES (%d, %d, %d, %s, %s, %s, %s, %s, %s, %s, %s)`,
+			VALUES (%d, %d, %d, %s, %s, %s, %s, %s, %s, %s, %s, %s)`,
 			collection,
-			wofid, parent, pt.Id, str_superseded, str_deprecated,
+			wofid, parent, pt.Id, str_wd_id, str_superseded, str_deprecated,
 			str_meta, str_properties, geom_hash, lastmod, st_geojson, st_centroid)
 
 		st_geojson = actual_st_geojson
@@ -412,19 +414,19 @@ func (client *PgisClient) IndexFeature(feature geojson.Feature, collection strin
 		}
 
 		sql = fmt.Sprintf(`INSERT INTO %s (id,
-			parent_id, placetype_id, is_superseded, is_deprecated, meta, properties, geom_hash, lastmod, geom, centroid)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, %s, %s)
+			parent_id, placetype_id, wd_id, is_superseded, is_deprecated, meta, properties, geom_hash, lastmod, geom, centroid)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, %s, %s)
 			ON CONFLICT(id) DO UPDATE SET
-			parent_id=$10, placetype_id=$11, is_superseded=$12, is_deprecated=$13, meta=$14, properties=$15,
-			geom_hash=$16, lastmod=$17, geom=%s, centroid=%s`,
+			parent_id=$11, placetype_id=$12, wd_id=$13, is_superseded=$14, is_deprecated=$15, meta=$16, properties=$17,
+			geom_hash=$18, lastmod=$19, geom=%s, centroid=%s`,
 			collection,
 			st_geojson, st_centroid, st_geojson, st_centroid)
 
 		_, err = db.Exec(
 			sql,
 			wofid,
-			parent, pt.Id, str_superseded, str_deprecated, str_meta, str_properties, geom_hash, lastmod,
-			parent, pt.Id, str_superseded, str_deprecated, str_meta, str_properties, geom_hash, lastmod,
+			parent, pt.Id, str_wd_id, str_superseded, str_deprecated, str_meta, str_properties, geom_hash, lastmod,
+			parent, pt.Id, str_wd_id, str_superseded, str_deprecated, str_meta, str_properties, geom_hash, lastmod,
 		)
 
 		if err != nil {
