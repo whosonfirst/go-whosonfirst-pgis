@@ -27,12 +27,14 @@ rmdeps:
 deps:   rmdeps
 	@GOPATH=$(GOPATH) go get -u "github.com/skelterjohn/geom"
 	@GOPATH=$(GOPATH) go get -u "github.com/tidwall/gjson"
+	@GOPATH=$(GOPATH) go get -u "github.com/mmcloughlin/geohash"
 	# @GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-export"
 	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-flags"
 	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-hash"
 	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-placetypes"
 	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-spr"
 	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/go-whosonfirst-uri"
+	@GOPATH=$(GOPATH) go get -u "github.com/whosonfirst/warning"
 
 vendor-deps: deps
 	if test -d vendor; then rm -rf vendor; fi

@@ -5,8 +5,8 @@ import (
 )
 
 type StandardPlacesResult interface {
-	Id() int64
-	ParentId() int64
+	Id() string
+	ParentId() string
 	Name() string
 	Placetype() string
 	Country() string
@@ -26,7 +26,7 @@ type StandardPlacesResult interface {
 	IsSuperseding() flags.ExistentialFlag
 	SupersededBy() []int64
 	Supersedes() []int64
-	LastModified()	int64
+	LastModified() int64
 }
 
 type Pagination interface {
