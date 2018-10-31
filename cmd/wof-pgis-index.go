@@ -42,6 +42,9 @@ func main() {
 
 	logger := log.SimpleWOFLogger()
 
+	writer := io.MultiWriter(os.Stdout)
+	logger.AddLogger(writer, "status")
+
 	client, err := pgis.NewPgisClient(*pgis_host, *pgis_port, *pgis_user, *pgis_pswd, *pgis_dbname, *pgis_maxconns)
 
 	if err != nil {
