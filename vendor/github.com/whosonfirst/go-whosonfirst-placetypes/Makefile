@@ -1,32 +1,15 @@
-CWD=$(shell pwd)
-GOPATH := $(CWD)
-
-prep:
-	if test -d pkg; then rm -rf pkg; fi
-
-rmdeps:
-	if test -d src; then rm -rf src; fi 
-
-build:	rmdeps deps fmt bin
-
-self:   prep
-	if test -d src/github.com/whosonfirst/go-whosonfirst-placetypes; then rm -rf src/github.com/whosonfirst/go-whosonfirst-placetypes; fi
-	mkdir -p src/github.com/whosonfirst/go-whosonfirst-placetypes/filter
-	mkdir -p src/github.com/whosonfirst/go-whosonfirst-placetypes/placetypes
-	cp *.go src/github.com/whosonfirst/go-whosonfirst-placetypes/
-	cp *.go src/github.com/whosonfirst/go-whosonfirst-placetypes/
-	cp filter/*.go src/github.com/whosonfirst/go-whosonfirst-placetypes/filter/
-	cp placetypes/*.go src/github.com/whosonfirst/go-whosonfirst-placetypes/placetypes/
-
-deps:   self
+vendor-deps: 
+	go mod vendor
 
 fmt:
 	go fmt *.go
 	go fmt placetypes/*.go
 	go fmt filter/*.go
 
-test:	self
-	@GOPATH=$(GOPATH) go run cmd/test.go
+tools:	
+	go build -o bin/wof-placetype-ancestors cmd/wof-placetype-ancestors/main.go
+	go build -o bin/wof-placetype-children cmd/wof-placetype-children/main.go
+	go build -o bin/wof-placetype-descendants cmd/wof-placetype-descendants/main.go
 
 spec:
-	@GOPATH=$(GOPATH) go run cmd/mk-spec.go > placetypes/spec.go
+	go run cmd/mk-spec/main.go > placetypes/spec.go

@@ -8,10 +8,10 @@ type PgisResultSet interface {
 }
 
 type PgisResult interface {
-     Row()	interface{}
+	Row() interface{}
 }
 
-// these are badly named... 
+// these are badly named...
 
 type PgisQueryRowFunc func(PgisResultSet) (PgisResult, error)
 

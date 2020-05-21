@@ -1,59 +1,107 @@
 package index
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"github.com/whosonfirst/go-whosonfirst-crawl"
-	"github.com/whosonfirst/go-whosonfirst-csv"
+	"fmt"
 	"github.com/whosonfirst/go-whosonfirst-log"
-	"github.com/whosonfirst/go-whosonfirst-timer"
 	"io"
-	"io/ioutil"
-	"os"
-	"path/filepath"
-	"strings"
+	"net/url"
+	"sort"
+	"sync"
 	"sync/atomic"
+	"time"
 )
 
 const (
 	STDIN = "STDIN"
 )
 
-type IndexerFunc func(fh io.Reader, ctx context.Context, args ...interface{}) error
+var (
+	driversMu sync.RWMutex
+	drivers   = make(map[string]Driver)
+)
+
+type IndexerFunc func(ctx context.Context, fh io.Reader, args ...interface{}) error
 
 type IndexerContextKey string
 
 type Indexer struct {
-	Mode    string
+	Driver  Driver
 	Func    IndexerFunc
 	Logger  *log.WOFLogger
 	Indexed int64
 	count   int64
 }
 
+// used by the IndexGit stuff
+// https://godoc.org/gopkg.in/src-d/go-git.v4/plumbing/protocol/packp/sideband#Progress
+
+/*
+type WOFLoggerProgress struct {
+	sideband.Progress
+	logger *log.WOFLogger
+}
+
+func (p *WOFLoggerProgress) Write(msg []byte) (int, error) {
+	p.logger.Status(string(msg))
+	return -1, nil
+}
+*/
+
+func Register(name string, driver Driver) {
+
+	driversMu.Lock()
+	defer driversMu.Unlock()
+
+	if driver == nil {
+		panic("sql: Register driver is nil")
+
+	}
+
+	if _, dup := drivers[name]; dup {
+		panic("index: Register called twice for driver " + name)
+	}
+
+	drivers[name] = driver
+}
+
+func unregisterAllDrivers() {
+	driversMu.Lock()
+	defer driversMu.Unlock()
+	drivers = make(map[string]Driver)
+}
+
+func Drivers() []string {
+
+	driversMu.RLock()
+	defer driversMu.RUnlock()
+
+	var list []string
+
+	for name := range drivers {
+		list = append(list, name)
+	}
+
+	sort.Strings(list)
+	return list
+}
+
 func Modes() []string {
 
-	return []string{
-		"directory",
-		"feature",
-		"feature-collection",
-		"files",
-		"geojson-ls",
-		"meta",
-		"path",
-		"repo",
-	}
+	return Drivers()
 }
 
 func ContextForPath(path string) (context.Context, error) {
 
-	key := IndexerContextKey("path")
-	ctx := context.WithValue(context.Background(), key, path)
-
+	ctx := AssignPathContext(context.Background(), path)
 	return ctx, nil
+}
+
+func AssignPathContext(ctx context.Context, path string) context.Context {
+
+	key := IndexerContextKey("path")
+	return context.WithValue(ctx, key, path)
 }
 
 func PathForContext(ctx context.Context) (string, error) {
@@ -68,12 +116,50 @@ func PathForContext(ctx context.Context) (string, error) {
 	return path.(string), nil
 }
 
-func NewIndexer(mode string, f IndexerFunc) (*Indexer, error) {
+func NewIndexer(dsn string, f IndexerFunc) (*Indexer, error) {
+
+	driversMu.Lock()
+	defer driversMu.Unlock()
+
+	u, err := url.Parse(dsn)
+
+	if err != nil {
+		return nil, err
+	}
+
+	name := u.Scheme
+
+	// this is here for backwards compatibility
+
+	if name == "" {
+
+		dsn = fmt.Sprintf("%s://", dsn)
+
+		u, err := url.Parse(dsn)
+
+		if err != nil {
+			return nil, err
+		}
+
+		name = u.Scheme
+	}
+
+	driver, ok := drivers[name]
+
+	if !ok {
+		return nil, errors.New("Unknown driver")
+	}
+
+	err = driver.Open(dsn)
+
+	if err != nil {
+		return nil, err
+	}
 
 	logger := log.SimpleWOFLogger("index")
 
 	i := Indexer{
-		Mode:    mode,
+		Driver:  driver,
 		Func:    f,
 		Logger:  logger,
 		Indexed: 0,
@@ -83,422 +169,56 @@ func NewIndexer(mode string, f IndexerFunc) (*Indexer, error) {
 	return &i, nil
 }
 
-func (i *Indexer) NewTimer(mode string, path string) (*timer.Timer, error) {
+func (i *Indexer) Index(ctx context.Context, paths ...string) error {
 
-	cb := func(t timer.Timing) {
-		i.Logger.Status("%s %s %v", mode, path, t.Duration())
+	t1 := time.Now()
+
+	defer func() {
+		t2 := time.Since(t1)
+		i.Logger.Status("time to index paths (%d) %v", len(paths), t2)
+	}()
+
+	i.increment()
+	defer i.decrement()
+
+	counter_func := func(ctx context.Context, fh io.Reader, args ...interface{}) error {
+		defer atomic.AddInt64(&i.Indexed, 1)
+		return i.Func(ctx, fh, args...)
 	}
 
-	tm, err := timer.NewDefaultTimer()
+	for _, path := range paths {
 
-	if err != nil {
-		return nil, err
+		select {
+		case <-ctx.Done():
+			break
+		default:
+			// pass
+		}
+
+		err := i.Driver.IndexURI(ctx, counter_func, path)
+
+		if err != nil {
+			return err
+		}
 	}
 
-	tm.Callback = cb
-	return tm, nil
+	return nil
 }
 
 func (i *Indexer) IndexPaths(paths []string, args ...interface{}) error {
 
-	tm, err := i.NewTimer("paths", "...")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	if err != nil {
-		return err
-	}
-
-	defer tm.Stop()
-
-	i.increment()
-	defer i.decrement()
-
-	for _, path := range paths {
-
-		err := i.IndexPath(path, args...)
-
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return i.Index(ctx, paths...)
 }
 
 func (i *Indexer) IndexPath(path string, args ...interface{}) error {
 
-	i.increment()
-	defer i.decrement()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	i.Logger.Debug("index %s in %s mode", path, i.Mode)
-
-	if i.Mode == "directory" {
-
-		return i.IndexDirectory(path, args...)
-
-	} else if i.Mode == "feature" {
-
-		return i.IndexFile(path, args...)
-
-	} else if i.Mode == "feature-collection" {
-
-		return i.IndexGeoJSONFeatureCollection(path, args...)
-
-	} else if i.Mode == "filelist" {
-
-		return i.IndexFileList(path, args...)
-
-	} else if i.Mode == "files" {
-
-		return i.IndexFile(path, args...)
-
-	} else if i.Mode == "geojson-ls" {
-
-		return i.IndexGeoJSONLS(path, args...)
-
-	} else if i.Mode == "meta" {
-
-		// please refactor all of this in to something... better
-		// (20170823/thisisaaronland)
-
-		parts := strings.Split(path, ":")
-
-		if len(parts) == 1 {
-
-			abs_root, err := filepath.Abs(parts[0])
-
-			if err != nil {
-				return err
-			}
-
-			meta_root := filepath.Dir(abs_root)
-			repo_root := filepath.Dir(meta_root)
-			data_root := filepath.Join(repo_root, "data")
-
-			parts = append(parts, data_root)
-		}
-
-		if len(parts) != 2 {
-			return errors.New("Invalid path declaration for a meta file")
-		}
-
-		for _, p := range parts {
-
-			if p == STDIN {
-				continue
-			}
-
-			_, err := os.Stat(p)
-
-			if os.IsNotExist(err) {
-				return errors.New("Path does not exist")
-			}
-		}
-
-		meta_file := parts[0]
-		data_root := parts[1]
-
-		return i.IndexMetaFile(meta_file, data_root, args...)
-
-	} else if i.Mode == "repo" {
-
-		abs_path, err := filepath.Abs(path)
-
-		if err != nil {
-			return err
-		}
-
-		data := filepath.Join(abs_path, "data")
-
-		_, err = os.Stat(data)
-
-		if err != nil {
-			return err
-		}
-
-		return i.IndexDirectory(data, args...)
-
-	} else {
-
-		return errors.New("Invalid indexer")
-	}
-
-}
-
-func (i *Indexer) IndexFile(path string, args ...interface{}) error {
-
-	tm, err := i.NewTimer("file", path)
-
-	if err != nil {
-		return err
-	}
-
-	defer tm.Stop()
-
-	i.increment()
-	defer i.decrement()
-
-	fh, err := i.readerFromPath(path)
-
-	if err != nil {
-		return err
-	}
-
-	defer fh.Close()
-
-	return i.process(fh, path, args...)
-}
-
-func (i *Indexer) IndexDirectory(path string, args ...interface{}) error {
-
-	tm, err := i.NewTimer("directory", path)
-
-	if err != nil {
-		return err
-	}
-
-	defer tm.Stop()
-
-	i.increment()
-	defer i.decrement()
-
-	abs_path, err := filepath.Abs(path)
-
-	if err != nil {
-		return err
-	}
-
-	cb := func(path string, info os.FileInfo) error {
-
-		if info.IsDir() {
-			return nil
-		}
-
-		return i.process_path(path, args...)
-	}
-
-	c := crawl.NewCrawler(abs_path)
-	return c.Crawl(cb)
-}
-
-func (i *Indexer) IndexGeoJSONFeatureCollection(path string, args ...interface{}) error {
-
-	tm, err := i.NewTimer("geojson-fc", path)
-
-	if err != nil {
-		return err
-	}
-
-	defer tm.Stop()
-
-	i.increment()
-	defer i.decrement()
-
-	fh, err := i.readerFromPath(path)
-
-	if err != nil {
-		return err
-	}
-
-	defer fh.Close()
-
-	body, err := ioutil.ReadAll(fh)
-
-	if err != nil {
-		return err
-	}
-
-	type FC struct {
-		Type     string
-		Features []interface{}
-	}
-
-	var collection FC
-
-	err = json.Unmarshal(body, &collection)
-
-	if err != nil {
-		return err
-	}
-
-	for _, f := range collection.Features {
-
-		feature, err := json.Marshal(f)
-
-		if err != nil {
-			return err
-		}
-
-		fh := bytes.NewBuffer(feature)
-		err = i.process(fh, path, args...)
-
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (i *Indexer) IndexGeoJSONLS(path string, args ...interface{}) error {
-
-	tm, err := i.NewTimer("geojson-ls", path)
-
-	if err != nil {
-		return err
-	}
-
-	defer tm.Stop()
-
-	i.increment()
-	defer i.decrement()
-
-	fh, err := i.readerFromPath(path)
-
-	if err != nil {
-		return err
-	}
-
-	defer fh.Close()
-
-	// see this - we're using ReadLine because it's entirely possible
-	// that the raw GeoJSON (LS) will be too long for bufio.Scanner
-	// see also - https://golang.org/pkg/bufio/#Reader.ReadLine
-	// (20170822/thisisaaronland)
-
-	reader := bufio.NewReader(fh)
-	raw := bytes.NewBuffer([]byte(""))
-
-	for {
-		fragment, is_prefix, err := reader.ReadLine()
-
-		if err == io.EOF {
-			break
-		}
-
-		if err != nil {
-			return err
-		}
-
-		raw.Write(fragment)
-
-		if is_prefix {
-			continue
-		}
-
-		fh := bytes.NewReader(raw.Bytes())
-
-		err = i.process(fh, path, args...)
-
-		if err != nil {
-			return err
-		}
-
-		raw.Reset()
-	}
-
-	return nil
-}
-
-func (i *Indexer) IndexMetaFile(path string, data_root string, args ...interface{}) error {
-
-	tm, err := i.NewTimer("metafile", path)
-
-	if err != nil {
-		return err
-	}
-
-	defer tm.Stop()
-
-	i.increment()
-	defer i.decrement()
-
-	fh, err := i.readerFromPath(path)
-
-	if err != nil {
-		return err
-	}
-
-	defer fh.Close()
-
-	reader, err := csv.NewDictReader(fh)
-
-	if err != nil {
-		return err
-	}
-
-	for {
-		row, err := reader.Read()
-
-		if err == io.EOF {
-			break
-		}
-
-		if err != nil {
-			return err
-		}
-
-		rel_path, ok := row["path"]
-
-		if !ok {
-			return errors.New("Missing path key")
-		}
-
-		// TO DO: make this work with a row["repo"] key
-		// (20170809/thisisaaronland)
-
-		file_path := filepath.Join(data_root, rel_path)
-
-		err = i.process_path(file_path, args...)
-
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (i *Indexer) IndexFileList(path string, args ...interface{}) error {
-
-	tm, err := i.NewTimer("filelist", path)
-
-	if err != nil {
-		return err
-	}
-
-	defer tm.Stop()
-
-	i.increment()
-	defer i.decrement()
-
-	fh, err := i.readerFromPath(path)
-
-	if err != nil {
-		return err
-	}
-
-	defer fh.Close()
-
-	scanner := bufio.NewScanner(fh)
-
-	for scanner.Scan() {
-
-		file_path := scanner.Text()
-
-		err = i.process_path(file_path, args...)
-
-		if err != nil {
-			return err
-		}
-	}
-
-	err = scanner.Err()
-
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return i.Index(ctx, path)
 }
 
 func (i *Indexer) IsIndexing() bool {
@@ -508,61 +228,6 @@ func (i *Indexer) IsIndexing() bool {
 	}
 
 	return false
-}
-
-func (i *Indexer) readerFromPath(abs_path string) (io.ReadCloser, error) {
-
-	if abs_path == STDIN {
-		return os.Stdin, nil
-	}
-
-	fh, err := os.Open(abs_path)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return fh, nil
-}
-
-func (i *Indexer) process_path(path string, args ...interface{}) error {
-
-	abs_path, err := filepath.Abs(path)
-
-	if err != nil {
-		return err
-	}
-
-	fh, err := os.Open(abs_path)
-
-	if err != nil {
-		return err
-	}
-
-	defer fh.Close()
-
-	return i.process(fh, abs_path, args...)
-}
-
-func (i *Indexer) process(fh io.Reader, path string, args ...interface{}) error {
-
-	i.increment()
-	defer i.decrement()
-
-	ctx, err := ContextForPath(path)
-
-	if err != nil {
-		return err
-	}
-
-	err = i.Func(fh, ctx, args...)
-
-	if err != nil {
-		return err
-	}
-
-	atomic.AddInt64(&i.Indexed, 1)
-	return nil
 }
 
 func (i *Indexer) increment() {
