@@ -1,5 +1,13 @@
 # go-whosonfirst-pgis
 
+## Install
+
+To compile all the binary tools just run the handy `cli-tools` Make target, like this:
+
+```
+make cli-tools
+```
+
 ## Set up
 
 First of all this requires Postgresql 9.6 in order that we can take advantage of the recent `UPSERT` syntax.
