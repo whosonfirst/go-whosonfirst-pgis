@@ -16,6 +16,8 @@ github.com/tidwall/gjson
 github.com/tidwall/match
 # github.com/tidwall/pretty v1.0.1
 github.com/tidwall/pretty
+# github.com/whosonfirst/go-whosonfirst-crawl v0.2.0
+github.com/whosonfirst/go-whosonfirst-crawl
 # github.com/whosonfirst/go-whosonfirst-flags v0.1.0
 github.com/whosonfirst/go-whosonfirst-flags
 github.com/whosonfirst/go-whosonfirst-flags/existential
@@ -30,6 +32,7 @@ github.com/whosonfirst/go-whosonfirst-geojson-v2/utils
 github.com/whosonfirst/go-whosonfirst-hash
 # github.com/whosonfirst/go-whosonfirst-index v0.2.3
 github.com/whosonfirst/go-whosonfirst-index
+github.com/whosonfirst/go-whosonfirst-index/fs
 github.com/whosonfirst/go-whosonfirst-index/utils
 # github.com/whosonfirst/go-whosonfirst-log v0.1.0
 github.com/whosonfirst/go-whosonfirst-log
@@ -45,5 +48,7 @@ github.com/whosonfirst/go-whosonfirst-spr
 github.com/whosonfirst/go-whosonfirst-timer
 # github.com/whosonfirst/go-whosonfirst-uri v0.2.0
 github.com/whosonfirst/go-whosonfirst-uri
+# github.com/whosonfirst/walk v0.0.0-20160803014805-c0a349674b73
+github.com/whosonfirst/walk
 # github.com/whosonfirst/warning v0.1.1
 github.com/whosonfirst/warning

@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"github.com/whosonfirst/go-whosonfirst-geojson-v2/feature"
 	"github.com/whosonfirst/go-whosonfirst-index"
+	_ "github.com/whosonfirst/go-whosonfirst-index/fs"	
 	"github.com/whosonfirst/go-whosonfirst-index/utils"
 	"github.com/whosonfirst/go-whosonfirst-log"
 	"github.com/whosonfirst/go-whosonfirst-pgis/client"
@@ -12,11 +14,16 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"strings"
 )
 
 func main() {
 
-	mode := flag.String("mode", "files", "The mode to use importing data. Valid options are: directory, meta, repo, filelist and files.")
+	modes := index.Modes()
+	str_modes := strings.Join(modes, ",")
+	mode_desc := fmt.Sprintf("The mode to use importing data. Valid options are: %s", str_modes)
+
+	mode := flag.String("mode", "repo", mode_desc)
 	geom := flag.String("geometry", "", "Which geometry to index. Valid options are: centroid, bbox or whatever is in the default GeoJSON geometry (default).")
 
 	procs := flag.Int("procs", 200, "The number of concurrent processes to use importing data.")
