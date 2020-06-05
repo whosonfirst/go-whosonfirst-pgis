@@ -1,8 +1,58 @@
+# github.com/alexbrainman/sspi v0.0.0-20180613141037-e580b900e9f5
+github.com/alexbrainman/sspi
+github.com/alexbrainman/sspi/negotiate
 # github.com/hashicorp/errwrap v1.0.0
 github.com/hashicorp/errwrap
 # github.com/hashicorp/go-multierror v1.1.0
 github.com/hashicorp/go-multierror
-# github.com/lib/pq v1.5.2
+# github.com/hashicorp/go-uuid v1.0.2
+github.com/hashicorp/go-uuid
+# github.com/jcmturner/aescts/v2 v2.0.0
+github.com/jcmturner/aescts/v2
+# github.com/jcmturner/dnsutils/v2 v2.0.0
+github.com/jcmturner/dnsutils/v2
+# github.com/jcmturner/gofork v1.0.0
+github.com/jcmturner/gofork/encoding/asn1
+github.com/jcmturner/gofork/x/crypto/pbkdf2
+# github.com/jcmturner/goidentity/v6 v6.0.1
+github.com/jcmturner/goidentity/v6
+# github.com/jcmturner/gokrb5/v8 v8.2.0
+github.com/jcmturner/gokrb5/v8/asn1tools
+github.com/jcmturner/gokrb5/v8/client
+github.com/jcmturner/gokrb5/v8/config
+github.com/jcmturner/gokrb5/v8/credentials
+github.com/jcmturner/gokrb5/v8/crypto
+github.com/jcmturner/gokrb5/v8/crypto/common
+github.com/jcmturner/gokrb5/v8/crypto/etype
+github.com/jcmturner/gokrb5/v8/crypto/rfc3961
+github.com/jcmturner/gokrb5/v8/crypto/rfc3962
+github.com/jcmturner/gokrb5/v8/crypto/rfc4757
+github.com/jcmturner/gokrb5/v8/crypto/rfc8009
+github.com/jcmturner/gokrb5/v8/gssapi
+github.com/jcmturner/gokrb5/v8/iana
+github.com/jcmturner/gokrb5/v8/iana/addrtype
+github.com/jcmturner/gokrb5/v8/iana/adtype
+github.com/jcmturner/gokrb5/v8/iana/asnAppTag
+github.com/jcmturner/gokrb5/v8/iana/chksumtype
+github.com/jcmturner/gokrb5/v8/iana/errorcode
+github.com/jcmturner/gokrb5/v8/iana/etypeID
+github.com/jcmturner/gokrb5/v8/iana/flags
+github.com/jcmturner/gokrb5/v8/iana/keyusage
+github.com/jcmturner/gokrb5/v8/iana/msgtype
+github.com/jcmturner/gokrb5/v8/iana/nametype
+github.com/jcmturner/gokrb5/v8/iana/patype
+github.com/jcmturner/gokrb5/v8/kadmin
+github.com/jcmturner/gokrb5/v8/keytab
+github.com/jcmturner/gokrb5/v8/krberror
+github.com/jcmturner/gokrb5/v8/messages
+github.com/jcmturner/gokrb5/v8/pac
+github.com/jcmturner/gokrb5/v8/service
+github.com/jcmturner/gokrb5/v8/spnego
+github.com/jcmturner/gokrb5/v8/types
+# github.com/jcmturner/rpc/v2 v2.0.2
+github.com/jcmturner/rpc/v2/mstypes
+github.com/jcmturner/rpc/v2/ndr
+# github.com/lib/pq v1.6.0
 github.com/lib/pq
 github.com/lib/pq/oid
 github.com/lib/pq/scram
@@ -30,7 +80,7 @@ github.com/whosonfirst/go-whosonfirst-geojson-v2/properties/whosonfirst
 github.com/whosonfirst/go-whosonfirst-geojson-v2/utils
 # github.com/whosonfirst/go-whosonfirst-hash v0.1.0
 github.com/whosonfirst/go-whosonfirst-hash
-# github.com/whosonfirst/go-whosonfirst-index v0.2.3
+# github.com/whosonfirst/go-whosonfirst-index v0.3.0
 github.com/whosonfirst/go-whosonfirst-index
 github.com/whosonfirst/go-whosonfirst-index/fs
 github.com/whosonfirst/go-whosonfirst-index/utils
@@ -52,3 +102,8 @@ github.com/whosonfirst/go-whosonfirst-uri
 github.com/whosonfirst/walk
 # github.com/whosonfirst/warning v0.1.1
 github.com/whosonfirst/warning
+# golang.org/x/crypto v0.0.0-20200311171314-f7b00557c8c4
+golang.org/x/crypto/md4
+golang.org/x/crypto/pbkdf2
+# golang.org/x/net v0.0.0-20200114155413-6afb5195e5aa
+golang.org/x/net/http2/hpack
