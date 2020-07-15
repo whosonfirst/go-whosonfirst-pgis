@@ -12,13 +12,15 @@ make cli-tools
 
 First of all this requires Postgresql 9.6 in order that we can take advantage of the recent `UPSERT` syntax.
 
-```
+#### Ubuntu Installation
+
+```bash
 sudo wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
 sudo apt-get update
 sudo apt-get install postgresql-9.6 postgresql-contrib-9.6 postgis postgresql-9.6-postgis-2.3
 ```
 
-```
+```bash
 sudo -u postgres createuser -P whosonfirst
 sudo -u postgres createdb -O whosonfirst whosonfirst
 sudo -u postgres psql -c "CREATE EXTENSION postgis; CREATE EXTENSION postgis_topology;" whosonfirst
@@ -30,6 +32,45 @@ sudo -u postgres psql -c "CREATE INDEX by_placetype ON whosonfirst (placetype_id
 ```
 
 _Note that this still lacks indices on things like `placetype_id` and others._
+
+#### Docker Container
+
+The `docker-compose.yml` & `setup.sh` files in this repo can be used to install & configure a PostGIS server running inside a Docker container.
+
+> the default superuser username is 'postgres' and the default password is 'secretpassword'.
+> these settings can be modified in docker-compose.yml along with the desired port mapping.
+
+```bash
+docker-compose up -d postgis
+```
+
+You can now connect to the database with the following command (from your local machine):
+
+```bash
+export PGPASSWORD='secretpassword'
+psql -h localhost -p 5432 -U postgres
+```
+
+Running `setup.sh` will set up the `whosonfirst` user, create the database & the table (as shown above).
+
+```bash
+./setup.sh
+```
+
+> by default the user account is named 'whosonfirst' and the password is 'secretpassword'.
+> note: you will need to correctly specify the `-pgis-password` flag when using docker.
+
+You can confirm the user, database & table were created correctly with the following command:
+
+```bash
+psql -h localhost -p 5432 -U whosonfirst -d whosonfirst -c '\dt+ whosonfirst'
+
+                           List of relations
+ Schema |    Name     | Type  |    Owner    |    Size    | Description
+--------+-------------+-------+-------------+------------+-------------
+ public | whosonfirst | table | whosonfirst | 8192 bytes |
+(1 row)
+```
 
 ## Utilities
 
