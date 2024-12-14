@@ -1,5 +1,9 @@
 # go-whosonfirst-pgis
 
+## Deprecation notice (December 2024)
+
+This package has been deprecated and superseded by tools in the [whosonfirst/go-whosonfirst-database-postgres](https://github.com/whosonfirst/go-whosonfirst-database-postgres) package.
+
 ## Install
 
 To compile all the binary tools just run the handy `cli-tools` Make target, like this:
